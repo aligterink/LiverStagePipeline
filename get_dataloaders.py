@@ -7,7 +7,7 @@ import segmentation.AI.train as train
 import segmentation.AI.dataset as dataset
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
-import exploration.get_models as get_models
+import get_models as get_models
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import glob

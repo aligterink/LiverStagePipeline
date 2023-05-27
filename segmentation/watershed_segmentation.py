@@ -5,6 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils import data_utils
 
+
 import numpy as np
 from PIL import Image
 from multiprocessing import Pool
@@ -134,12 +135,16 @@ if __name__ == "__main__":
     # image = imageio.mimread(path)[2] # read image
     # mask = get_segmentation(image, (0,16000), resize=(1040, 1392))
 
-    path = R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF135\D5\2019003_D5_135_hsp_20x_2_series_3_TileScan_001.tif"
-    image = imageio.mimread(path)[1] # read image
-    mask = get_segmentation(image, (0.0, 4095.0), resize=(1040, 1392))
+    # path = R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF135\D5\2019003_D5_135_hsp_20x_2_series_3_TileScan_001.tif"
+    # image = imageio.mimread(path)[1] # read image
+    # mask = get_segmentation(image, (0.0, 4095.0), resize=(1040, 1392))
 
-    plot(image, mask)
+    # plot(image, mask)
 
     # tif_dir = R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF135\D5"
     # seg_dir = R"C:\Users\anton\Documents\microscopy_data\dataset\watershed"
     # segment_dir(tif_dir, seg_dir, threads=8, channel=1, resize=(1040, 1392))
+
+    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset/images/"
+    seg_dir = "/mnt/DATA1/anton/data/lowres_dataset/watershed"
+    segment_dir(tif_dir, seg_dir, threads=40, channel=1, resize_shape=(1040, 1392))

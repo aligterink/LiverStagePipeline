@@ -1,7 +1,13 @@
+import sys
+import os
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
+from segmentation.AI.logger import Logger
+from segmentation.AI import visualize_log
+
 import torch
 from collections import OrderedDict
-from segmentation.AI.logger import Logger
-import exploration.visualize_log as visualize_log
+
 from tqdm import tqdm
 
 def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, print_every, device, log_file=None, figure_file=None, model_path=None, 

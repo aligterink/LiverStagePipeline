@@ -1,5 +1,11 @@
+import sys
+import os
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
 from torchvision import disable_beta_transforms_warning
 disable_beta_transforms_warning()
+
+from segmentation.AI import logger
 
 import numpy as np
 import utils.data_utils as data_utils
@@ -11,15 +17,15 @@ import segmentation.AI.dataset as dataset
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 
-import exploration.get_models as get_models
-import exploration.get_dataloaders as get_dataloaders
-import exploration.get_transforms as get_transforms
+import get_models as get_models
+import get_dataloaders as get_dataloaders
+import get_transforms as get_transforms
 import glob
 import utils.mask_utils as mask_utils
 
 ### Settings
 main_folder = "/mnt/DATA1/anton/pipeline_files"
-train_name = "partitioned6"
+train_name = "partitioned7"
 
 batch_size = 4
 dataloader_workers = 4
@@ -53,6 +59,10 @@ for f in crop_files:
     os.remove(f)
 dummy_train_loader, _, _ = get_dataloaders.v3(None, None, None, batch_size, dataloader_workers)
 mask_utils.extract_crops_from_loader(loader=dummy_train_loader, folder=crops_folder)
+
+# Generate watershed augmentation crops
+strain_day_paths = data_utils.get_two_sets(day_imgs_path, day_anno_path, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
+
 
 train_transform, train_individual_transform, test_transform = get_transforms.v1(crops_folder=crops_folder)
 train_loader, test_loader, testset_names = get_dataloaders.v3(train_transform, train_individual_transform, test_transform, batch_size, dataloader_workers, show=False)

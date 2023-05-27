@@ -1,6 +1,6 @@
 from torchvision import disable_beta_transforms_warning
 disable_beta_transforms_warning()
-import exploration.get_dataloaders as get_dataloaders
+
 import torchvision.transforms as transforms
 import numpy as np
 import torch
@@ -52,7 +52,7 @@ def store_crops(crops, bboxes, path_prefix, exclude_edgecases=True, image=None):
                 continue
             
         path = path_prefix + '_{}x{}.tif'.format(coord[0], coord[1])
-        crop = [crop[c, :, :] for c in range(crop.shape[0])] # format from 3d array to list of 2d arrays
+        crop = [crop[c, :, :].numpy() for c in range(crop.shape[0])] # format from 3d array to list of 2d arrays
         imageio.mimwrite(path, crop)
 
 
@@ -92,22 +92,3 @@ def extract_non_overlapping_crops_from_loader(loader, val_loader, folder=None, c
             if folder:
                 path_prefix = os.path.join(folder, Path(filename).stem)
                 store_crops(crops=crops, bboxes=bboxes, path_prefix=path_prefix, exclude_edgecases=exclude_edgecases, image=image)
-
-if __name__ == '__main__':
-    train_loader, test_loader = get_dataloaders.v2(train_transform=None, train_individual_transform=None, test_transform=None, batch_size=4, num_workers=4)
-    extract_crops_from_loader(train_loader, folder="/home/anton/Documents/microscopy_data/crops")
-
-    # p = "/home/anton/Documents/microscopy_data/3564_annotated_subset/Annie_subset_tiffs/NF135_D5/2019006c_D5_135_exp2_hsp_series_2_TileScan_001.tif"
-    # im = imageio.imread(p)
-    # imageio.mimwrite("/home/anton/Documents/results/figures/testingtif.tif", im)
-
-
-
-
-
-
-
-
-
-
-

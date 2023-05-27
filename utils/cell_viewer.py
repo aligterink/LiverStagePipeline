@@ -1,16 +1,19 @@
+import sys
+import os
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
 import imageio.v3
 import matplotlib.pyplot as plt
 from skimage.color import label2rgb
 import math
-import os
 import utils.data_utils as data_utils
 from pathlib import Path
 import segmentation.evaluate as evaluate
 import numpy as np
 
 # Show a single tiff with accompanying segmentations.
-# if eval=True, then first seg_path should be true annotation
-def visualize_file(tif_path, seg_paths=[], eval=False):
+# if eval=True, then first seg_path should be the ground truth annotation
+def show_file(tif_path, seg_paths=[], eval=False):
     colormaps = ['Blues', 'hot', 'BuGn', 'Greens']
     titles = ['DAPI', 'HSP70', 'Channel 3', 'Channel 4']
 
@@ -52,10 +55,10 @@ def visualize_file(tif_path, seg_paths=[], eval=False):
     plt.show()
 
 # Show a tiff file in a directory. When closed keep opening the next tiff file.
-def visualize_dir(tif_dir, seg_dirs, tif_file, eval=True):
+def show_folder(tif_dir, seg_dirs, tif_file=None, eval=True):
     
     tif_paths = data_utils.get_paths(tif_dir)
-    file_index = [Path(p).stem for p in tif_paths].index(tif_file[:-4])
+    file_index = [Path(p).stem for p in tif_paths].index(tif_file[:-4]) if tif_file else np.random.randint(0, len(tif_paths))
 
     for i in range(file_index, len(tif_paths)):
         tif_path = tif_paths[i]
@@ -69,53 +72,27 @@ def visualize_dir(tif_dir, seg_dirs, tif_file, eval=True):
             if os.path.isfile(seg_path):
                 seg_paths.append(seg_path)
         
-        visualize_file(tif_path, seg_paths, eval=eval)
-
-
-# Show a tiff file in a directory. When closed keep opening the next tiff file.
-def visualize_files(tif_paths, seg_paths_2d, tif_file=None, eval=True):
-    # common_path_lists = dataloader.get_common_subset([tif_paths] + seg_paths_2d)
-    # common_tif_paths = seg_paths_2d[0]
-    # common_seg_paths_2d = seg_paths_2d[1:]
-    
-    if tif_file:
-        file_index = [Path(p).stem for p in tif_paths].index(tif_file[:-4])
-    else:
-        file_index = 0
-
-    for i in range(file_index, len(tif_paths)):
-        tif_path = tif_paths[i]
-        tif_stem = Path(tif_path).stem
-
-        seg_paths_for_tif_file = []
-        for seg_paths in seg_paths_2d:
-            try:
-                seg_paths_for_tif_file.append(seg_paths[[Path(path).stem for path in seg_paths].index(tif_stem)])
-            except:
-                pass
-
-        if len(seg_paths_for_tif_file) == len(seg_paths_2d):
-            
-            for seg_path in seg_paths_for_tif_file:
-                assert Path(tif_path).stem == Path(seg_path).stem, "Not identical file names."
-
-            visualize_file(tif_path, seg_paths_for_tif_file, eval=eval)
-
+        show_file(tif_path, seg_paths, eval=eval)
 
 if __name__ == "__main__":
-    tif_dirs = [R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF54"]
-    seg_dirs = [
-        [R"C:\Users\anton\Documents\microscopy_data\dataset\annotation"],
-        [R"C:\Users\anton\Documents\microscopy_data\model_segmentations\segmentations_partitioned6"]
-                 ]
-    tif_file = "2019003_D7_54_hspgsb_series_10_TileScan_001.png"
-    # tif_file = '2019003_D7_175_hsp_gs_a_series_2_TileScan_001.tif'
-    # tif_dirs = [R"C:\Users\anton\Documents\microscopy_data\Stressed cells"]
-    # seg_dirs = []
+    # tif_dirs = [R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF54"]
+    # seg_dirs = [
+    #     [R"C:\Users\anton\Documents\microscopy_data\dataset\annotation"],
+    #     [R"C:\Users\anton\Documents\microscopy_data\model_segmentations\segmentations_partitioned6"]
+    #              ]
+    # tif_file = "2019003_D7_54_hspgsb_series_10_TileScan_001.png"
+    # # tif_file = '2019003_D7_175_hsp_gs_a_series_2_TileScan_001.tif'
+    # # tif_dirs = [R"C:\Users\anton\Documents\microscopy_data\Stressed cells"]
+    # # seg_dirs = []
 
 
-    tif_paths = sum([data_utils.get_paths(folder, extension='.tif') for folder in tif_dirs], [])
-    seg_paths_2d = [sum([data_utils.get_paths(folder, extension='.png') for folder in seg_dir], []) for seg_dir in seg_dirs]
-    visualize_files(tif_paths, seg_paths_2d, tif_file=None)
+    # tif_paths = sum([data_utils.get_paths(folder, extension='.tif') for folder in tif_dirs], [])
+    # seg_paths_2d = [sum([data_utils.get_paths(folder, extension='.png') for folder in seg_dir], []) for seg_dir in seg_dirs]
+    # visualize_files(tif_paths, seg_paths_2d, tif_file=None)
+
+    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset/images"
+    seg_dir = ["/mnt/DATA1/anton/data/lowres_dataset/annotation", "/mnt/DATA1/anton/data/lowres_dataset/watershed"]
+    show_folder(tif_dir, seg_dir)
+    
 
     

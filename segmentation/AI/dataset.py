@@ -63,7 +63,7 @@ class MicroscopyDataset(Dataset):
 
     def __getitem__(self, idx, savepath=None):
         image_filepath = self.image_paths[idx]
-        image = np.array(list(map(imageio.mimread(image_filepath).__getitem__, self.channels))).astype(np.float)
+        image = np.array(list(map(imageio.mimread(image_filepath).__getitem__, self.channels))).astype(np.float64)
         original_image = image
 
         mask_filepath = self.mask_paths[idx]
