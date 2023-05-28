@@ -210,7 +210,7 @@ class Evaluator():
                 images = list(image.to(self.device) for image in images)
                 outputs = model(images)
 
-                del images
+                # del images
                 torch.cuda.empty_cache()
 
                 results += self.eval_batch(true_masks, outputs, filenames)

@@ -55,8 +55,8 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
 
             # print([(k,round(output[k].item(), 3)) for k in output.keys()])
 
-            del images
-            del targets
+            # del images
+            # del targets
             torch.cuda.empty_cache()
 
             # Backward pass

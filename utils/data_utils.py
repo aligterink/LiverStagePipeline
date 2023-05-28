@@ -53,8 +53,9 @@ def get_data_from_paths(paths, extension, channel=None, array=False):
 
 def get_common_subset(paths_dir1, paths_dir2):
     common_stems = list(set([Path(p).stem for p in paths_dir1]).intersection([Path(p).stem for p in paths_dir2]))
-    paths_dir1 = [p for p in paths_dir1 if Path(p).stem in common_stems]
-    paths_dir2 = [p for p in paths_dir2 if Path(p).stem in common_stems]
+    paths_dir1 = sorted([p for p in paths_dir1 if Path(p).stem in common_stems], key=lambda x: common_stems.index(Path(x).stem))
+    paths_dir2 = sorted([p for p in paths_dir2 if Path(p).stem in common_stems], key=lambda x: common_stems.index(Path(x).stem))
+    # paths_dir1, paths_dir2 = zip(*sorted(zip(paths_dir1, paths_dir2), key=lambda x: common_stems.index(Path(x[0]).stem)))
     return paths_dir1, paths_dir2
 
 # From two folders, return files with corresponding stems
@@ -99,7 +100,10 @@ def get_image_list(paths):
 # Given a folder and a file stem, return paths of all files in folder with said stem
 def find_stem_in_other_folder(folder, stem):
     folder_paths = get_paths(folder)
-    corresponding_path = folder_paths[[Path(f).stem for f in folder_paths].index(stem)]
+    try:
+        corresponding_path = folder_paths[[Path(f).stem for f in folder_paths].index(stem)]
+    except:
+        corresponding_path = None
     return corresponding_path
 
 # Given some paths in a dir, generate corresponding paths in another dir
@@ -119,6 +123,18 @@ def normalize(img, old_range, new_range=(-1, +1)):
     img += new_range[0]
     return img
 
+def count_cells(annotation_folder, substring=None):
+    paths = get_paths(annotation_folder, extension='.png', recursive=True, substring=substring)
+    imgs, cells = len(paths), 0
+    for path in paths:
+        img = imageio.v2.imread(path)
+        cells += len(np.unique(img)) - 1
+    print('{} cells in {} images for {}'.format(cells, imgs, annotation_folder))
+    return imgs, cells
+
+
+
+
 if __name__ == "__main__":
     tifdir = "/mnt/DATA2/anton/3564_low_res_imgs/tiffs"
     segdir = "/mnt/DATA2/anton/3564_low_res_imgs/tiffs_watersheds"
@@ -127,7 +143,8 @@ if __name__ == "__main__":
     # x = get_image_array(tifdir, get_paths(tifdir), 1)
     # print(len(x))
 
-    tifpaths, segpaths = get_two_sets(tifdir, segdir, common_subset=True, extension_dir1='.tif', return_paths=True, max_imgs=12)
-    train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
-    # print(next(iter(train_loader))[0].shape)
-    train_loader.__getitem__(2)
+    # tifpaths, segpaths = get_two_sets(tifdir, segdir, common_subset=True, extension_dir1='.tif', return_paths=True, max_imgs=12)
+    # train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
+    # # print(next(iter(train_loader))[0].shape)
+    # train_loader.__getitem__(2)
+    count_cells("/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF175/D7")

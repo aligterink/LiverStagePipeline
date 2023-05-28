@@ -20,7 +20,7 @@ def show_file(tif_path, seg_paths=[], eval=False):
     channels = imageio.mimread(tif_path) # read image
     num_channels = len(channels) + len(seg_paths)
 
-    fig, axs = plt.subplots(nrows=2, ncols=math.ceil(num_channels/2), sharex=True, sharey=True, figsize=(15, 8))
+    fig, axs = plt.subplots(nrows=2, ncols=math.ceil(num_channels/2), sharex=True, sharey=True, figsize=(32, 16))
     if num_channels % 2:
         fig.delaxes(axs[1, math.ceil(num_channels/2)-1])
 
@@ -30,21 +30,20 @@ def show_file(tif_path, seg_paths=[], eval=False):
         if i >= len(channels):
             # Read mask file
             seg = imageio.v3.imread(seg_paths[i-len(channels)])
-            # rgbseg = label2rgb(seg, bg_label=0) #, colors=0.25+0.5*np.random.random((len(np.unique(seg)), 3)))
+            # rgb_seg = label2rgb(seg, bg_label=0) #, colors=0.25+0.5*np.random.random((len(np.unique(seg)), 3)))
             rgb_seg = seg.copy()
             rgb_seg[rgb_seg!=0] += 40
 
             # Perform optional evaluation
             if eval and i-len(channels) > 0:
                 true_mask = imageio.v3.imread(seg_paths[0])
-                # evaluate.eval([true_mask], [seg], identifier=Path(seg_paths[i-len(channels)]).stem)
                 evaluate.eval(true_mask, seg, print_metrics=True)
 
             # Show mask
-            axs[x, y].imshow(rgb_seg) #, vmin=0, vmax=16000)
+            axs[x, y].imshow(rgb_seg)
             axs[x, y].set_title('/'.join(os.path.normpath(seg_paths[i-len(channels)]).split(os.sep)[-3:-1]))
         else:
-            axs[x, y].imshow(channels[i], cmap=colormaps[i]) #, vmin=0, vmax=16000)
+            axs[x, y].imshow(channels[i], cmap=colormaps[i])
             axs[x, y].set_title(titles[i])
     
     fig.suptitle(os.path.basename(tif_path))
@@ -56,21 +55,23 @@ def show_file(tif_path, seg_paths=[], eval=False):
 
 # Show a tiff file in a directory. When closed keep opening the next tiff file.
 def show_folder(tif_dir, seg_dirs, tif_file=None, eval=True):
-    
     tif_paths = data_utils.get_paths(tif_dir)
-    file_index = [Path(p).stem for p in tif_paths].index(tif_file[:-4]) if tif_file else np.random.randint(0, len(tif_paths))
+    file_index = [Path(p).stem for p in tif_paths].index(tif_file[:-4]) if tif_file else 0
 
     for i in range(file_index, len(tif_paths)):
+        quit = False
+
         tif_path = tif_paths[i]
         seg_paths = []
         
         for seg_dir in seg_dirs:
-            if not isinstance(seg_dir, list):
-                seg_dir = [seg_dir]
-                
             seg_path = data_utils.find_stem_in_other_folder(seg_dir, Path(tif_path).stem)
-            if os.path.isfile(seg_path):
+            if seg_path and os.path.isfile(seg_path):
                 seg_paths.append(seg_path)
+            else:
+                quit = True
+        if quit:
+            continue
         
         show_file(tif_path, seg_paths, eval=eval)
 
@@ -90,9 +91,10 @@ if __name__ == "__main__":
     # seg_paths_2d = [sum([data_utils.get_paths(folder, extension='.png') for folder in seg_dir], []) for seg_dir in seg_dirs]
     # visualize_files(tif_paths, seg_paths_2d, tif_file=None)
 
-    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset/images"
-    seg_dir = ["/mnt/DATA1/anton/data/lowres_dataset/annotation", "/mnt/DATA1/anton/data/lowres_dataset/watershed"]
-    show_folder(tif_dir, seg_dir)
+    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF54/D7"
+    seg_dir = ["/mnt/DATA1/anton/data/lowres_dataset_selection/annotation", "/mnt/DATA1/anton/pipeline_files/results/segmentations/"]#"/mnt/DATA1/anton/data/lowres_dataset_selection/watershed"]
+    # show_folder(tif_dir, seg_dir)
+    show_file("/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF175/D7/2019003_D7_175_hsp_gs_a_series_1_TileScan_001.tif", ["/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF175/D7/2019003_D7_175_hsp_gs_a_series_1_TileScan_001.png"])
     
 
     

@@ -5,6 +5,7 @@ import segmentation.evaluate as evaluate
 import torch
 import segmentation.AI.train as train
 import segmentation.AI.dataset as dataset
+from utils import mask_utils
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 import get_models as get_models
@@ -27,7 +28,7 @@ def show_dataset(dataset):
     np.random.shuffle(ids)
     for idx in ids:
         dataset.__getitem__(idx, savepath="/mnt/DATA1/anton/pipeline_files/results/figures/dataset.png")
-        input('Showing image {}. Press enter to continue...'.format(idx))
+        # input('Showing image {}. Press enter to continue...'.format(idx))
 
 def get_meanstd(dataset, channel):
     ids = np.arange(0, dataset.__len__())
@@ -84,14 +85,15 @@ def v2(train_transform, train_individual_transform, test_transform, batch_size, 
 
     return train_loader, test_loaders
 
-def v3(train_transform, train_individual_transform, test_transform, batch_size, num_workers, show=False):
+def v3(train_transform, train_individual_transform, test_transform, batch_size, num_workers, crops_folder, watershed_crops_folder, show=False):
 
-    testset_names, test_sets, X_train, y_train = [], [], [], []
+    testset_names, test_sets, X_train, y_train, y_train_watershed = [], [], [], [], []
 
     strains = ['NF54', 'NF135', 'NF175']
     days = ['D3', 'D5', 'D7']
 
-    dataset_path = "/mnt/DATA1/anton/data/lowres_dataset"
+    dataset_path = "/mnt/DATA1/anton/data/lowres_dataset_selection"
+    watershed_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed"
 
     for strain in strains:
         imgs_path = dataset_path + '/' + 'images' + '/' + strain
@@ -101,7 +103,7 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
             day_anno_path = anno_path + '/' + day
 
             strain_day_paths = data_utils.get_two_sets(day_imgs_path, day_anno_path, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-            strainday_X_train, strainday_X_test, strainday_y_train, strainday_y_test = train_test_split(strain_day_paths[0], strain_day_paths[1], test_size=0.2, random_state=60, shuffle=True)
+            strainday_X_train, strainday_X_test, strainday_y_train, strainday_y_test = train_test_split(strain_day_paths[0], strain_day_paths[1], test_size=0.2, random_state=62, shuffle=True)
 
             testset_names.append(strain + '_' + day)
             X_train += strainday_X_train
@@ -109,7 +111,18 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
 
             test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=test_transform))
 
+    dummy_trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=None, individual_transform=None)
+    dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
 
+    X_train_watershed, y_train_watershed = data_utils.get_common_subset(X_train, data_utils.get_paths(watershed_path, extension='.png'))
+
+    from pathlib import Path
+    for a,b in zip(X_train_watershed, y_train_watershed):
+        assert Path(a).stem == Path(b).stem, '{} != {}'.format(a, b)
+
+    trainset_watershed = dataset.MicroscopyDataset(X_train_watershed, y_train_watershed, filter_empty=True, transform=None, individual_transform=None)
+    train_loader_watershed = torch.utils.data.DataLoader(trainset_watershed, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
+    
     trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform)
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
 
@@ -117,7 +130,7 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
         show_dataset(trainset)
 
     test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=lambda x:list(zip(*x))) for test_set in test_sets]
-    return train_loader, test_loaders, testset_names
+    return train_loader, test_loaders, testset_names, dummy_train_loader, train_loader_watershed
 
 
 def plot_set(set):

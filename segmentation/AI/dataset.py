@@ -23,7 +23,7 @@ def find_folder_range(image_paths, channels):
     return range_dict
 
 class MicroscopyDataset(Dataset):
-    def __init__(self, image_paths, mask_paths=None, channels=[0, 1], transform=None, individual_transform=None, filter_empty=False, set_folder_ranges=True):
+    def __init__(self, image_paths, mask_paths=None, channels=[0, 1], transform=None, individual_transform=None, filter_empty=False, set_folder_ranges=False):
         # set_folder_max: we are using data with a multitude of intensity ranges caused by different microscopes and settings. When set to True, this parameter finds the highest pixel intensity in the folder of each respective image, which can be used for normalization purposes. Note that this normalization relies on the assumption that folders do not contain mixtures of different microscopes or microscope settings.
 
         self.image_paths = image_paths
@@ -50,7 +50,7 @@ class MicroscopyDataset(Dataset):
         # print('Normalized: blue: {} ... {}, red: {}, {}'.format(augmented_image[0].min(), augmented_image[0].max(), 
         #                                                     augmented_image[1].min(), augmented_image[1].max()))
 
-        fig, axs = plt.subplots(2, 3, figsize=(60,30))
+        fig, axs = plt.subplots(2, 3, figsize=(60,30), sharex=True, sharey=True)
         aspect = 'auto'
         axs[0, 0].imshow(original_image[0], aspect=aspect, cmap='Blues')
         axs[0, 1].imshow(original_image[1], aspect=aspect, cmap='hot')
@@ -59,7 +59,10 @@ class MicroscopyDataset(Dataset):
         axs[1, 1].imshow(augmented_image[1], aspect=aspect, cmap='hot')
         axs[1, 2].imshow(augmented_mask, aspect=aspect)
         fig.tight_layout()
-        plt.savefig(savepath)
+        if savepath:
+            plt.savefig(savepath)
+        else:
+            plt.show()
 
     def __getitem__(self, idx, savepath=None):
         image_filepath = self.image_paths[idx]
@@ -90,20 +93,19 @@ class MicroscopyDataset(Dataset):
             
         # For each bounding boxes, check if 0 <= x1 < x2 <= W and 0 <= y1 < y2 <= H. 
         # If not, then remove that mask in the list of bboxes, masks and labels.
-        verify_bbox = lambda bbox: (
-            (0 <= bbox[0] < bbox[2] <= labeled_mask.shape[1] and 0 <= bbox[1] < bbox[3] <= labeled_mask.shape[0]).item())
+        verify_bbox = lambda bbox: ((0 <= bbox[0] < bbox[2] <= labeled_mask.shape[1] and 0 <= bbox[1] < bbox[3] <= labeled_mask.shape[0]).item())
         bbox_validity = torch.Tensor([verify_bbox(bounding_boxes[i,:].type(torch.int32)) for i in range(bounding_boxes.shape[0])])==True
-
+        
         masks = datapoints.Mask(masks[bbox_validity])
-        bounding_boxes = datapoints.BoundingBox(
-            bounding_boxes[bbox_validity], format=datapoints.BoundingBoxFormat.XYXY, spatial_size=image.shape[-2:])
+        bounding_boxes = datapoints.BoundingBox(bounding_boxes[bbox_validity], format=datapoints.BoundingBoxFormat.XYXY, spatial_size=image.shape[-2:])
         labels = labels[bbox_validity]
 
         target = {'boxes': bounding_boxes, 'labels': labels, 'masks': masks}
         name = Path(image_filepath).stem
 
         if savepath:
-            self.plot(original_image, labeled_mask, image, target, name, savepath)
+
+            self.plot(original_image, labeled_mask, image, target, name, savepath=None)
 
         return image, target, labeled_mask, name
 

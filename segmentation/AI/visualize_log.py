@@ -82,7 +82,7 @@ def plot_metrics(log_file, save_path="/home/anton/Documents/results/figures/exam
         lns +=  ax2.plot(metrics['epoch'], metrics['train_aP'], label='Train aP')
 
     labels = [l.get_label() for l in lns]
-    ax1.legend(lns, labels, loc='upper center')
+    ax1.legend(lns, labels, loc='lower center')
 
     # ax2.tick_params(axis='y', labelcolor=color)
 

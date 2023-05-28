@@ -145,6 +145,6 @@ if __name__ == "__main__":
     # seg_dir = R"C:\Users\anton\Documents\microscopy_data\dataset\watershed"
     # segment_dir(tif_dir, seg_dir, threads=8, channel=1, resize=(1040, 1392))
 
-    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset/images/"
-    seg_dir = "/mnt/DATA1/anton/data/lowres_dataset/watershed"
+    tif_dir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/"
+    seg_dir = "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed"
     segment_dir(tif_dir, seg_dir, threads=40, channel=1, resize_shape=(1040, 1392))

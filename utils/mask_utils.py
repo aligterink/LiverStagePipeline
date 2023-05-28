@@ -73,20 +73,33 @@ def extract_crops_from_loader(loader, folder=None, channels=None, exclude_edgeca
 def extract_non_overlapping_crops_from_loader(loader, val_loader, folder=None, channels=None, exclude_edgecases=True):
     # exclude_edgecases: exclude crops that are on the edge of the image
 
-    nono_bboxes = {}
+    val_masks = {}
 
     for images, targets, _, filenames in val_loader:
         for image, target, filename in zip(images, targets, filenames):
-            nono_bboxes[filename] = target['boxes'].tolist()
-
+            masks = target['masks'].cpu().numpy()
+            val_masks[filename] = np.any(masks, axis=0)
 
     for images, targets, _, filenames in loader:
         for image, target, filename in zip(images, targets, filenames):
-            overlap_mask = multiple_bboxes_to_single_mask(bboxes, (image.shape[2], image.shape[1]))
 
             bboxes = target['boxes'].tolist()
             masks = target['masks']
             bboxes = [[int(coord) for coord in bbox] for bbox in bboxes]
+
+            if len(bboxes) < 1:
+                continue
+
+            overlapping_indices = []
+
+            for i in range(masks.shape[0]):
+                overlapping_indices.append(np.any(np.logical_and(val_masks[filename], masks[i,:,:].cpu().numpy())))
+
+            non_overlapping_indices = np.invert(overlapping_indices)
+            
+            bboxes = [bbox for bbox,non_overlap in zip(bboxes, non_overlapping_indices) if non_overlap]
+            masks = masks[non_overlapping_indices]
+
             crops = get_crops(image, bboxes, masks, channels=channels)
 
             if folder:
