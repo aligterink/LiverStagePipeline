@@ -23,11 +23,10 @@ import get_transforms as get_transforms
 import glob
 import utils.mask_utils as mask_utils
 from sklearn.model_selection import KFold
-torch.manual_seed(2)
 
 ### Settings
 main_folder = "/mnt/DATA1/anton/pipeline_files"
-train_name = "no_copypaste"
+train_name = "norm_test"
 
 dataset_path = "/mnt/DATA1/anton/data/lowres_dataset_selection"
 watershed_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed"
@@ -60,7 +59,7 @@ if not torch.cuda.is_available():
     print("Using non-cuda device: {}".format(device))
 
 train_transform, train_individual_transform, test_transform = get_transforms.v1(crops_folder=crops_folder, watershed_crop_folder=watershed_crops_folder)
-train_loader, test_loaders, testset_names, dummy_loader, train_loader_watershed = get_dataloaders.v3(train_transform, train_individual_transform, test_transform, batch_size, dataloader_workers, crops_folder, watershed_crops_folder, show=False)
+train_loader, test_loaders, testset_names, dummy_loader, train_loader_watershed = get_dataloaders.v3(train_transform, train_individual_transform, test_transform, batch_size, dataloader_workers, crops_folder, watershed_crops_folder)
 
 
 
@@ -127,11 +126,11 @@ train_loader, test_loaders, testset_names, dummy_loader, train_loader_watershed 
 
 evaluator = evaluate.Evaluator(device, train_loader=train_loader, test_loaders=test_loaders, store_folder=segmentation_folder, processes=eval_workers, testset_names=testset_names)
 
-# Generate new crops of training set cells
-crop_files = glob.glob(crops_folder + '/*.tif')
-for f in crop_files:
-    os.remove(f)
-mask_utils.extract_crops_from_loader(loader=dummy_loader, folder=crops_folder)
+# # Generate new crops of training set cells
+# crop_files = glob.glob(crops_folder + '/*.tif')
+# for f in crop_files:
+#     os.remove(f)
+# mask_utils.extract_crops_from_loader(loader=dummy_loader, folder=crops_folder)
 
 # # Generate watershed augmentation crops
 # watershed_crop_files = glob.glob(watershed_crops_folder + '/*.tif')

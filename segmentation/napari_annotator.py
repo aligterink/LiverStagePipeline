@@ -5,8 +5,8 @@ from PIL import Image
 import numpy as np
 
 ### Settings
-tif_dir = R"C:\Users\anton\Documents\testimgs\tif"
-seg_dir = R"C:\Users\anton\Documents\testimgs\anno"
+tif_dir = "/mnt/DATA1/anton/data/testset/images/"
+seg_dir = "/mnt/DATA1/anton/data/testset/annotation/"
 starting_tif = "2019003_D5_135_hsp_20x_2_series_1_TileScan_001.tif"
 
 remove_all_labels_key = 't'

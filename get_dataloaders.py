@@ -13,79 +13,19 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import glob
 
-# folder_4thexp = "/home/anton/Documents/microscopy_data/fourth_channel_experiments"
-# folder_NF54 = "/home/anton/Documents/microscopy_data/NF54_annotation"
-
-# folder_3564_tifs = "/home/anton/Documents/microscopy_data/3564_annotated_subset/Annie_subset_tiffs"
-# folder_3564_anno = "/home/anton/Documents/microscopy_data/3564_annotated_subset/Annie_subset_annotations"
-
 # Filters out images with empty masks which are not accepted by mask R-CNN
 def collate_fn(batch):
-    return list(zip(*list(filter(lambda x : x if(x is not None) else None, batch))))
+    # return list(zip(*list(filter(lambda x : x if(x is not None) else None, batch))))
+    return zip([sample for sample in batch if 'masks' in sample.keys() and sample['masks']])
 
-def show_dataset(dataset):
-    ids = np.arange(0, dataset.__len__())
-    np.random.shuffle(ids)
-    for idx in ids:
-        dataset.__getitem__(idx, savepath="/mnt/DATA1/anton/pipeline_files/results/figures/dataset.png")
-        # input('Showing image {}. Press enter to continue...'.format(idx))
+# def show_dataset(dataset):
+#     ids = np.arange(0, dataset.__len__())
+#     np.random.shuffle(ids)
+#     for idx in ids:
+#         dataset.__getitem__(idx)
+#         # input('Showing image {}. Press enter to continue...'.format(idx))
 
-def get_meanstd(dataset, channel):
-    ids = np.arange(0, dataset.__len__())
-    np.random.shuffle(ids)
-    c = []
-    for idx in ids:
-        image, target, labeled_mask, name = dataset.__getitem__(idx)
-        print(image.shape)
-        c.append(image[channel,:,:])
-
-    cstack = torch.stack(c, 0)
-    print(cstack.shape, torch.mean(cstack), torch.std(cstack))
-
-def v1(train_transform, train_individual_transform, test_transform, batch_size, num_workers, show=False):
-
-    train_paths_4thexp = data_utils.get_two_sets(folder_4thexp, folder_4thexp, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-    train_paths_NF54 = data_utils.get_two_sets(folder_NF54, folder_NF54, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-    trainset = dataset.MicroscopyDataset(train_paths_4thexp[0] + train_paths_NF54[0], train_paths_4thexp[1] + train_paths_NF54[1], 
-                                        filter_empty=True, transform=train_transform)
-
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
-
-    substrings = {'D3_54': 'NF54 D3', 'D5_54': 'NF54 D5', 'D7_54': 'NF54 D7',
-                'D3_135': 'NF135 D3', 'D5_135': 'NF135 D5', 'D7_135': 'NF135 D7',
-                'D3_175': 'NF175 D3', 'D5_175': 'NF175 D5', 'D7_175': 'NF175 D7'}
-    test_path_sets = [data_utils.get_two_sets(folder_3564_tifs, folder_3564_anno, common_subset=True, substring=k, extension_dir1='.tif', 
-                                            extension_dir2='.png', return_paths=True) for k in substrings.keys()]
-    test_sets = [dataset.MicroscopyDataset(tps[0], tps[1], filter_empty=False, transform=test_transform) for tps in test_path_sets]
-    test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=lambda x:list(zip(*x))) for test_set in test_sets]
-    return train_loader, test_loaders
-
-
-def v2(train_transform, train_individual_transform, test_transform, batch_size, num_workers, show=False):
-
-    paths_4thexp = data_utils.get_two_sets(folder_4thexp, folder_4thexp, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-    paths_NF54 = data_utils.get_two_sets(folder_NF54, folder_NF54, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-    paths_3654 = data_utils.get_two_sets(folder_3564_tifs, folder_3564_anno, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-    
-    tif_paths = paths_4thexp[0] + paths_NF54[0] + paths_3654[0]
-    seg_paths = paths_4thexp[1] + paths_NF54[1] + paths_3654[1]
-
-    tif_train, tif_test, seg_train, seg_test = train_test_split(tif_paths, seg_paths, test_size=0.2, random_state=43, shuffle=True)
-    tif_train, seg_train = tif_train[0:10], seg_train[0:10] ### for testing purposes
-    trainset = dataset.MicroscopyDataset(tif_train, seg_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform)
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
-    
-    if show:
-        show_dataset(trainset)
-
-    tif_test, seg_test = tif_test[0:10], seg_test[0:10]
-    testset = dataset.MicroscopyDataset(tif_test, seg_test, filter_empty=True, transform=test_transform)
-    test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=num_workers, collate_fn=lambda x:list(zip(*x)))
-    test_loaders = [test_loader, test_loader]
-
-    return train_loader, test_loaders
-
-def v3(train_transform, train_individual_transform, test_transform, batch_size, num_workers, crops_folder, watershed_crops_folder, show=False):
+def v3(train_transform, train_individual_transform, test_transform, batch_size, num_workers, crops_folder, watershed_crops_folder):
 
     testset_names, test_sets, X_train, y_train, y_train_watershed = [], [], [], [], []
 
@@ -103,13 +43,13 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
             day_anno_path = anno_path + '/' + day
 
             strain_day_paths = data_utils.get_two_sets(day_imgs_path, day_anno_path, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-            strainday_X_train, strainday_X_test, strainday_y_train, strainday_y_test = train_test_split(strain_day_paths[0], strain_day_paths[1], test_size=0.2, random_state=62, shuffle=True)
+            strainday_X_train, strainday_X_test, strainday_y_train, strainday_y_test = train_test_split(strain_day_paths[0], strain_day_paths[1], test_size=0.2, random_state=64, shuffle=True)
 
             testset_names.append(strain + '_' + day)
             X_train += strainday_X_train
             y_train += strainday_y_train
 
-            test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=test_transform))
+            test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=test_transform, folder_normalize=True))
 
     dummy_trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=None, individual_transform=None)
     dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
@@ -123,11 +63,8 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
     trainset_watershed = dataset.MicroscopyDataset(X_train_watershed, y_train_watershed, filter_empty=True, transform=None, individual_transform=None)
     train_loader_watershed = torch.utils.data.DataLoader(trainset_watershed, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
     
-    trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform)
+    trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform, folder_normalize=True)
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
-
-    if show:
-        show_dataset(trainset)
 
     test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=lambda x:list(zip(*x))) for test_set in test_sets]
     return train_loader, test_loaders, testset_names, dummy_train_loader, train_loader_watershed

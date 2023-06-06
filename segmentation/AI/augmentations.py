@@ -60,6 +60,16 @@ class CustomNormalize:
         # assert img.max() <= 4095, "Max pixel value in image is larger than 4095. Normalization will not work."
         return (img, *sample[1:])
     
+# class CustomNormalize:
+#     def __init__(self, range_dict):
+#         self.range_dict = range_dict
+
+#     def __call__(self, sample):
+#         img = sample[0]
+#         img = torch.Tensor(np.interp(img, (0, 4095), (-1, +1)))
+#         # assert img.max() <= 4095, "Max pixel value in image is larger than 4095. Normalization will not work."
+#         return (img, *sample[1:])
+    
 class CustomNormalizeSingleChannel:
     def __call__(self, img):
         return img / 10000
@@ -77,12 +87,11 @@ class GaussianFilter:
 
 class SizeAdjustedPytorchGaussianBlur:
     def __call__(self, sample):
-        ks1, ks2 = round(sample.shape[0]/2), round(sample.shape[1]/2)
-        if ks1 % 2 == 0:
-            ks1 += 1
-        if ks2 % 2 == 0:
-            ks2 += 1
-        return transforms.GaussianBlur(kernel_size=(ks1, ks2), sigma=sum(sample.shape)/2/10)(sample)
+        kernel_size = max(3, round(sum(sample.shape)/2 / 5))
+        sigma = min(0.1, sum(sample.shape)/2/20)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        return transforms.GaussianBlur(kernel_size=kernel_size, sigma=sigma)(sample)
 
 class MakeMedian:
     def __init__(self, multiplier=1.5):
@@ -178,7 +187,7 @@ class RandomCopyPaste:
             if not self.min_crop_size <= crop[0].shape[0] <= self.max_crop_size or not self.min_crop_size <= crop[0].shape[1] <= self.max_crop_size:
                 continue
 
-            crop = np.pad(crop, ((0,0),(2,2),(2,2)))
+            # crop = np.pad(crop, ((0,0),(2,2),(2,2)))
             mask = np.any(crop, axis=0)
 
             crop = torch.tensor(crop).unsqueeze(1)
@@ -254,14 +263,14 @@ class ClusterCopyPaste:
                 if not self.min_crop_size <= paste_cell_crop[0].shape[0] <= self.max_crop_size or not self.min_crop_size <= paste_cell_crop[0].shape[1] <= self.max_crop_size:
                     continue
 
+                if self.transform:
+                    paste_cell_crop, paste_cell_mask = self.transform(paste_cell_crop, paste_cell_mask)
+
                 if self.individual_transform:
                     for c in [cp[0] for cp in self.channel_paste]:
                         channel = self.individual_transform[c](torch.unsqueeze(paste_cell_crop[c,:,:], 0))
                         channel = torch.squeeze(channel)
                         paste_cell_crop[c,:,:] = channel
-
-                if self.transform:
-                    paste_cell_crop, paste_cell_mask = self.transform(paste_cell_crop, paste_cell_mask)
 
                 paste_cell_crop = normalizeCrop(reference_intensities, paste_cell_crop, self.channel_paste, paste_cell_mask)
 
@@ -329,12 +338,15 @@ class ClusterCopyPaste:
                     # Update bounding box for both
                     img_bboxes[overlapping_cell_index,:] = masks_to_boxes(img_masks[overlapping_cell_index,:,:].unsqueeze(dim=0))
 
-                # Update the image and all lists
+                # Update the image
                 for paste in self.channel_paste:
                     img[paste[1], paste_cell_min_y:paste_cell_max_y, paste_cell_min_x:paste_cell_max_x] = torch.maximum(img[paste[1], paste_cell_min_y:paste_cell_max_y, paste_cell_min_x:paste_cell_max_x], torch.Tensor(paste_cell_crop[paste[0],:,:]))
-                    img_bboxes = torch.cat((img_bboxes, masks_to_boxes(paste_cell_mask.unsqueeze(dim=0))), dim=0)
-
+                
+                # Add the bbox and mask of the crop
+                img_bboxes = torch.cat((img_bboxes, masks_to_boxes(paste_cell_mask.unsqueeze(dim=0))), dim=0)
                 img_masks = torch.cat((img_masks, paste_cell_mask.unsqueeze(dim=0)), dim=0)
+
+                # Check if the maximum amount of cells have been pasted
                 num_objs += 1
                 if num_objs >= self.max_objs:
                     dont_continue = True

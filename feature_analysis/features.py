@@ -1,6 +1,9 @@
+import sys
 import os
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
 import imageio.v3
-import utils.data_utils as data_utils
+from utils import data_utils, mask_utils
 from skimage.measure import regionprops
 from skimage import data, util, measure
 import numpy as np
@@ -12,6 +15,8 @@ import matplotlib.pyplot as plt
 import math
 from skimage import filters, morphology, measure, segmentation
 from skimage.measure import _regionprops
+from scipy import ndimage
+
 
 available_regionprops = _regionprops.PROPS.values()
 
@@ -26,9 +31,11 @@ class Extractor:
         self.num_channels = intensity_image.shape[-1]
         
         self.max_intensities = [None] * self.num_channels
+        self.avg_intensities = [None] * self.num_channels
+
 
     def get_channel(self, channel):
-        if channel == -1:
+        if channel == 'mask':
             return self.mask
         else: 
             return self.intensity_image[:, :, channel]
@@ -67,9 +74,9 @@ class Extractor:
     
     ##### Channel-wide and image-wide features
     def get_avg_channel_intensity(self, channel):
-        if not self.max_intensities[channel]:
-            self.max_intensities[channel] = np.average(self.get_channel(channel))
-        return self.max_intensities[channel]
+        if not self.avg_intensities[channel]:
+            self.avg_intensities[channel] = np.average(self.get_channel(channel))
+        return self.avg_intensities[channel]
 
 
     ##### Cell-specific features
@@ -79,43 +86,42 @@ class Extractor:
     def get_max_intensity(self, channel, label):
         return np.max(self.get_channel(channel)[(self.mask == label)])
 
-    def get_num_local_maxima(self, regionmask, intensity_image):
+    def get_num_local_maxima(self, channel, label):
+        regionmask = self.mask == label
+        intensity_image = self.get_channel(channel)
         region_intensity = intensity_image
         region_intensity[~regionmask] = 0
 
         # side_length = round(math.sqrt(np.sum(regionmask)))
         image_max = ndi.maximum_filter(region_intensity, size=3, mode='constant')
 
-        # coordinates = peak_local_max(region_intensity)
+        coordinates = peak_local_max(region_intensity)
 
-        # # display results
-        # fig, axes = plt.subplots(1, 3, figsize=(8, 3), sharex=True, sharey=True)
-        # ax = axes.ravel()
-        # ax[0].imshow(region_intensity, cmap=plt.cm.gray)
-        # ax[0].axis('off')
-        # ax[0].set_title('Original')
+        # display results
+        fig, axes = plt.subplots(1, 3, figsize=(8, 3), sharex=True, sharey=True)
+        ax = axes.ravel()
+        ax[0].imshow(region_intensity, cmap=plt.cm.gray)
+        ax[0].axis('off')
+        ax[0].set_title('Original')
 
-        # ax[1].imshow(image_max, cmap=plt.cm.gray)
-        # ax[1].axis('off')
-        # ax[1].set_title('Maximum filter')
+        ax[1].imshow(image_max, cmap=plt.cm.gray)
+        ax[1].axis('off')
+        ax[1].set_title('Maximum filter')
 
-        # ax[2].imshow(region_intensity, cmap=plt.cm.gray)
-        # ax[2].autoscale(False)
-        # ax[2].plot(coordinates[:, 1], coordinates[:, 0], 'r.')
-        # ax[2].axis('off')
-        # ax[2].set_title('Peak local max')
+        ax[2].imshow(region_intensity, cmap=plt.cm.gray)
+        ax[2].autoscale(False)
+        ax[2].plot(coordinates[:, 1], coordinates[:, 0], 'r.')
+        ax[2].axis('off')
+        ax[2].set_title('Peak local max')
 
-        # fig.tight_layout()
+        fig.tight_layout()
 
-        # plt.show()
+        plt.show()
 
-        # return len(coordinates)
+        return len(coordinates)
 
-    # 1: skimage features (regionmask, intensityimage)
-    # 2: homebrew features
-        # 2a: compatible with skimage (regionmask)
-        # 2b: not compatible with skimage (x)
-    # 3: cell profiler ?
+    def get_centre_coords(self, channel, label):
+        return ndimage.center_of_mass(self.mask == label)
 
     # This method is overwritten by the regionprops area feature
     def get_area(self, label):
@@ -126,23 +132,9 @@ class Extractor:
     
     # Zonal paper feature: sum(HGs cell intensity) - average_image_hgs_background * cell_area
     def get_normalized_intensity_sum(self, channel, label):
-        return self.get_intensity_sum(channel, label) - self.get_avg_channel_intensity(channel) * self.get_area(label)
+        # print(self.get_avg_channel_intensity(channel))
+        return self.get_intensity_sum(channel, label) - (self.get_avg_channel_intensity(channel) * self.get_area(label))
 
 
 if __name__ == '__main__':
-        img_path = R"C:\Users\anton\Documents\microscopy_data\dataset\images\NF135\D5\2019003_D5_135_hsp_20x_2_series_1_TileScan_001.tif"
-        mask_path = R"C:\Users\anton\Documents\microscopy_data\dataset\annotation\NF135\D5\2019003_D5_135_hsp_20x_2_series_1_TileScan_001.png"
-
-        img = np.array(imageio.mimread(img_path)).transpose(1, 2, 0)
-        mask = imageio.v3.imread(mask_path)
-
-        x = Extractor(mask, img, '2019003_D5_135_hsp_20x_2_series_1_TileScan_001')
-
-        mask_features = ['area', 'area_convex'] #, 'area_filled', 'axis_major_length', 'axis_minor_length',
-                    #  'eccentricity', 'equivalent_diameter_area', 'extent', 'feret_diameter_max', 'orientation',
-                    #  'perimeter', 'perimeter_crofton', 'solidity']
-        default_channel_features = ['normalized_intensity_sum']
-
-        feature_dict = {-1: ('', ['area', 'area_convex']), 0: ('dapi', ['normalized_intensity_sum']), 1: ('hsp', [])}
-        features1 = x.get_features(feature_dict)
-        print(features1)
+    pass

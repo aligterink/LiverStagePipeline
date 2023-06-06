@@ -58,6 +58,19 @@ def get_common_subset(paths_dir1, paths_dir2):
     # paths_dir1, paths_dir2 = zip(*sorted(zip(paths_dir1, paths_dir2), key=lambda x: common_stems.index(Path(x[0]).stem)))
     return paths_dir1, paths_dir2
 
+from pathlib import Path
+
+from pathlib import Path
+
+def intersection_of_lists(tuples_of_lists):
+    dicts = [{Path(path).stem: path for path in path_list} for path_list in tuples_of_lists]
+    common_stems = list(set([stem for sublist in dicts for stem in sublist.keys()]))
+    intersections = [[d[stem] for d in dicts] for stem in common_stems if all([stem in d.keys() for d in dicts])]
+    transposed_intersections = np.array(intersections).T.tolist()
+    return transposed_intersections
+
+
+
 # From two folders, return files with corresponding stems
 def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1='.tif', extension_dir2='.png', 
                  array=False, channel_dir1=None, channel_dir2=None, split=None, exclude=None, return_paths=False, max_imgs=None):
@@ -132,19 +145,36 @@ def count_cells(annotation_folder, substring=None):
     print('{} cells in {} images for {}'.format(cells, imgs, annotation_folder))
     return imgs, cells
 
+# 
+def find_folder_range(image_paths, channels):
+    folder_paths = set([os.path.dirname(path) for path in image_paths])
+    range_dict = {fp: {c: (999999999, 0) for c in channels} for fp in folder_paths}
 
+    for path in image_paths:
+        folder = os.path.dirname(path)
+        for channel in channels:
+            range_dict[folder][channel] = (min(range_dict[folder][channel][0], np.min(imageio.mimread(path, memtest=False)[channel])), 
+                                           max(range_dict[folder][channel][1], np.max(imageio.mimread(path)[channel])))
+    return range_dict
+
+    # range_dict = {fp: [(999999999, 0)]*len(channels) for fp in folder_paths}
+    # for path in image_paths:
+    #     folder = os.path.dirname(path)
+    #     for i, channel in enumerate(channels):
+    #         range_dict[folder][i] = (min(range_dict[folder][i][0], np.min(imageio.mimread(path, memtest=False)[channel])), max(range_dict[folder][i][1], np.max(imageio.mimread(path)[channel])))
+    # return range_dict
 
 
 if __name__ == "__main__":
-    tifdir = "/mnt/DATA2/anton/3564_low_res_imgs/tiffs"
+    tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"
     segdir = "/mnt/DATA2/anton/3564_low_res_imgs/tiffs_watersheds"
     # # x1, x2 = get_two_sets(tifdir, segdir, extension_dir1='.tif')
     # # print(len(x1))
     # x = get_image_array(tifdir, get_paths(tifdir), 1)
     # print(len(x))
 
-    # tifpaths, segpaths = get_two_sets(tifdir, segdir, common_subset=True, extension_dir1='.tif', return_paths=True, max_imgs=12)
+    tifpaths = get_paths(tifdir, extension='.tif')
+    print(find_folder_range(tifpaths, channels=[0,1,2]))
     # train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
     # # print(next(iter(train_loader))[0].shape)
     # train_loader.__getitem__(2)
-    count_cells("/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF175/D7")
