@@ -12,25 +12,25 @@ import numpy as np
 import imageio.v2 as imageio
 from segmentation.AI.augmentations import *
 
-def v1(crops_folder, watershed_crop_folder):
+def v1(crops_folder):
     train_individual_transform = {
                     0: transforms.Compose([
-                        CustomNormalizeSingleChannel(),
+                        # CustomNormalizeSingleChannel(),
 
-                        transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)], p=0.4),
-                        transforms.RandomAdjustSharpness(4, p=0.3),
-                        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1,6.0))], p=0.3),
+                        # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)], p=0.4),
+                        # transforms.RandomAdjustSharpness(4, p=0.3),
+                        # transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1,6.0))], p=0.3),
 
-                        RevertNormalizationSingleChannel()
+                        # RevertNormalizationSingleChannel()
                         ]),
                     1: transforms.Compose([
-                        CustomNormalizeSingleChannel(),
+                        # CustomNormalizeSingleChannel(),
 
-                        transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)], p=0.4),
-                        transforms.RandomAdjustSharpness(4, p=0.3),
-                        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1,6.0))], p=0.3),
+                        # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)], p=0.4),
+                        # transforms.RandomAdjustSharpness(4, p=0.3),
+                        # transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1,6.0))], p=0.3),
 
-                        RevertNormalizationSingleChannel()
+                        # RevertNormalizationSingleChannel()
                         ])
                     }
 
@@ -82,7 +82,7 @@ def v1(crops_folder, watershed_crop_folder):
 
         transforms.RandomApply([ClusterCopyPaste(folder=crops_folder, min_objs_per_obj=2, max_objs_per_obj=5,
                         transform=transforms.Compose([ # transformations for the pasted crops
-                            transforms.RandomRotation(degrees=(0, 360), expand=True),
+                            # transforms.RandomRotation(degrees=(0, 360), expand=True),
                             # transforms.RandomApply([transforms.RandomResize(min_size=20, max_size=60)], p=1)
                         ]),
                         individual_transform=
@@ -104,22 +104,14 @@ def v1(crops_folder, watershed_crop_folder):
                             # GaussianFilter(sigma=1),
                             # SizeAdjustedPytorchGaussianBlur()
 
-                            GaussianNoise(0.35),
-                            GaussianFilter(sigma=0.8)
+                            # GaussianNoise(0.35),
+                            # GaussianFilter(sigma=0.8)
                         ])
                         }
                     )], p=1),
         
         # transforms.RandomApply([GaussianNoise()], p=0.3),
 
-        CustomNormalize()
     ])
 
-    test_transform = transforms.Compose([
-        CustomNormalize()
-    ])
-
-    return train_transform, train_individual_transform, test_transform
-
-def get_test_transform():
-    return transforms.Compose([CustomNormalize()])
+    return train_transform, train_individual_transform

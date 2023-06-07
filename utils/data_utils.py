@@ -72,7 +72,7 @@ def intersection_of_lists(tuples_of_lists):
 
 
 # From two folders, return files with corresponding stems
-def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1='.tif', extension_dir2='.png', 
+def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1='', extension_dir2='', 
                  array=False, channel_dir1=None, channel_dir2=None, split=None, exclude=None, return_paths=False, max_imgs=None):
     
     paths_dir1 = get_paths(dir1, extension=extension_dir1, recursive=True, substring=substring)

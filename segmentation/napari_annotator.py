@@ -1,13 +1,20 @@
+import sys
+import os
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
+from utils import data_utils
+
 import napari
 import imageio.v3
 import os
 from PIL import Image
 import numpy as np
+from pathlib import Path
 
 ### Settings
-tif_dir = "/mnt/DATA1/anton/data/testset/images/"
-seg_dir = "/mnt/DATA1/anton/data/testset/annotation/"
-starting_tif = "2019003_D5_135_hsp_20x_2_series_1_TileScan_001.tif"
+tif_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04"
+seg_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04_watershed/"
+starting_tif = "Exp2021025A-01-Scene-03-B4-B04_series_1_Exp2021025A-01-Scene-03-B4-B04.tif"
 
 remove_all_labels_key = 't'
 remove_blob_key = 'r'
@@ -15,7 +22,6 @@ save_key = 's'
 next_image_key = 'v'
 previous_image_key = 'c'
 new_label_key = 'f'
-
 toggle_labels = 'e'
 
 # Indices in these lists coincide with the indices of the layers. 
@@ -30,16 +36,10 @@ layer_colormaps = ['blue', 'red', 'cyan', 'green', 'yellow']
 
 
 # Initialize files
-tif_files = [f for f in os.listdir(tif_dir) if all([os.path.isfile(os.path.join(tif_dir, f)), f.startswith('.') == False])]
-tif_files.sort()
-
-seg_files = [f for f in os.listdir(seg_dir) if all([os.path.isfile(os.path.join(seg_dir, f)), f.startswith('.') == False])]
-seg_files.sort()
+tif_files, seg_files = data_utils.get_two_sets(tif_dir, seg_dir, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
 
 global file_index 
-file_index = tif_files.index(starting_tif)
-
-assert [f[:-4] for f in tif_files] == [f[:-4] for f in seg_files], ".tif and segmentation folders do not contain identical filenames"
+file_index = tif_files.index(os.path.join(tif_dir, starting_tif))
 
 # create viewer
 viewer = napari.Viewer()
@@ -52,6 +52,7 @@ def change_image(viewer, forward): # makes the viewer go an image forwards or ba
 
     current_tif_path = os.path.join(tif_dir, tif_files[file_index])
     current_seg_path = os.path.join(seg_dir, seg_files[file_index])
+    assert Path(current_tif_path).stem == Path(current_seg_path).stem
 
     image = imageio.mimread(current_tif_path) # read tif
 

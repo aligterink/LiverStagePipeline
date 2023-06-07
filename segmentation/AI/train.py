@@ -37,20 +37,17 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
 
         model.train()
         epoch_training_loss = 0
-        for sample in tqdm(train_loader, leave=False):
-            # b, r = images[0][0,:,:], images[0][1,:,:]
-            # print(type(b), type(r), b.dtype, r.dtype, b.shape, r.shape, b.min(), b.max(), b.median(), r.min(), r.max(), r.median())
+        for batch in tqdm(train_loader, leave=False):
 
             # Send the data to the device
-            print(sample[0], type(sample[0]))
-            images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            X = list(image.to(device) for image in batch['X'])
+            y = [{k: v.to(device) for k, v in t.items()} for t in batch['y']]
 
             # Zero the gradients
             optimizer.zero_grad()
 
             # Forward pass
-            output = model(images, targets)
+            output = model(X, y)
             loss = sum(loss for loss in output.values())
             epoch_training_loss += loss.item()
 
@@ -72,12 +69,13 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
         # Write info to log
         epoch_dict = OrderedDict([('epoch', str(epoch + 1)), ('train_loss', round(epoch_training_loss, 3))])
 
-        # Compute metrics on the train and test data
-        if eval_trainloader:
-            x = evaluator.eval_train(model)
-            epoch_dict.update(x)
-        y = evaluator.eval_test(model)
-        epoch_dict.update(y)
+        # # Compute metrics on the train and test data
+        # if eval_trainloader:
+        #     x = evaluator.eval_train(model)
+        #     epoch_dict.update(x)
+
+        test_results = evaluator.eval_test(model)
+        epoch_dict.update(test_results)
         
         # Write epoch results to log
         best_epoch = logger.log(epoch_dict)

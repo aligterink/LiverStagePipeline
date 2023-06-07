@@ -5,7 +5,7 @@ import segmentation.evaluate as evaluate
 import torch
 import segmentation.AI.train as train
 import segmentation.AI.dataset as dataset
-from utils import mask_utils
+from utils import mask_utils, cell_viewer
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 import get_models as get_models
@@ -14,26 +14,37 @@ import matplotlib.pyplot as plt
 import glob
 
 # Filters out images with empty masks which are not accepted by mask R-CNN
-def collate_fn(batch):
+def collate_fn_MRCNN_train(batch):
     # return list(zip(*list(filter(lambda x : x if(x is not None) else None, batch))))
-    return zip([sample for sample in batch if 'masks' in sample.keys() and sample['masks']])
+    filtered_batch = [sample for sample in batch if 'masks' in sample.keys() and len(sample['masks'].size()) > 0]
 
-# def show_dataset(dataset):
-#     ids = np.arange(0, dataset.__len__())
-#     np.random.shuffle(ids)
-#     for idx in ids:
-#         dataset.__getitem__(idx)
-#         # input('Showing image {}. Press enter to continue...'.format(idx))
+    new_batch = {
+        'X': [sample['image'] for sample in filtered_batch],
+        'y': [{k: sample[k] for k in ('boxes','labels','masks')} for sample in filtered_batch],
+        'file_paths': [sample['file_path'] for sample in filtered_batch],
+        'masks_2d': [sample['mask_2d'] for sample in filtered_batch]
+    }
+    return new_batch
 
-def v3(train_transform, train_individual_transform, test_transform, batch_size, num_workers, crops_folder, watershed_crops_folder):
+def collate_fn_MRCNN_test(batch):
+    new_batch = {}
+    new_batch = {
+        'X': [sample['image'] for sample in batch],
+        'y': [{k: sample[k] for k in ('boxes','labels','masks')} for sample in batch],
+        'file_names': [sample['name'] for sample in batch],
+        'masks_2d': [sample['mask_2d'] for sample in batch]
+    }
+    return new_batch
 
-    testset_names, test_sets, X_train, y_train, y_train_watershed = [], [], [], [], []
+
+def v3(train_transform, train_individual_transform, batch_size, num_workers, crops_folder):
+
+    testset_names, test_sets, X_train, y_train = [], [], [], []
 
     strains = ['NF54', 'NF135', 'NF175']
     days = ['D3', 'D5', 'D7']
 
     dataset_path = "/mnt/DATA1/anton/data/lowres_dataset_selection"
-    watershed_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed"
 
     for strain in strains:
         imgs_path = dataset_path + '/' + 'images' + '/' + strain
@@ -49,25 +60,18 @@ def v3(train_transform, train_individual_transform, test_transform, batch_size, 
             X_train += strainday_X_train
             y_train += strainday_y_train
 
-            test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=test_transform, folder_normalize=True))
+            test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=None, folder_normalize=True))
 
     dummy_trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=None, individual_transform=None)
-    dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
+    dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_MRCNN_train)
 
-    X_train_watershed, y_train_watershed = data_utils.get_common_subset(X_train, data_utils.get_paths(watershed_path, extension='.png'))
-
-    from pathlib import Path
-    for a,b in zip(X_train_watershed, y_train_watershed):
-        assert Path(a).stem == Path(b).stem, '{} != {}'.format(a, b)
-
-    trainset_watershed = dataset.MicroscopyDataset(X_train_watershed, y_train_watershed, filter_empty=True, transform=None, individual_transform=None)
-    train_loader_watershed = torch.utils.data.DataLoader(trainset_watershed, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
-    
     trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform, folder_normalize=True)
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_MRCNN_train)
 
-    test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=lambda x:list(zip(*x))) for test_set in test_sets]
-    return train_loader, test_loaders, testset_names, dummy_train_loader, train_loader_watershed
+    cell_viewer.show_dataset(trainset)
+
+    test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn_MRCNN_test) for test_set in test_sets] # old collate: lambda x:list(zip(*x))
+    return train_loader, test_loaders, testset_names, dummy_train_loader
 
 
 def plot_set(set):

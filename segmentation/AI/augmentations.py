@@ -53,12 +53,12 @@ class RewrittenRandomResize:
 #     def __call__(self, img: np.array, mask: np.array):
 #         pass
 
-class CustomNormalize:
-    def __call__(self, sample):
-        img = sample[0]
-        img = torch.Tensor(np.interp(img, (0, 4095), (-1, +1)))
-        # assert img.max() <= 4095, "Max pixel value in image is larger than 4095. Normalization will not work."
-        return (img, *sample[1:])
+# class CustomNormalize:
+#     def __call__(self, sample):
+#         img = sample[0]
+#         img = torch.Tensor(np.interp(img, (0, 4095), (-1, +1)))
+#         # assert img.max() <= 4095, "Max pixel value in image is larger than 4095. Normalization will not work."
+#         return (img, *sample[1:])
     
 # class CustomNormalize:
 #     def __init__(self, range_dict):

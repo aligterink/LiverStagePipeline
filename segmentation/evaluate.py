@@ -221,14 +221,14 @@ class Evaluator():
 
             results = []
 
-            for images, _, true_masks, filenames in loader:
-                images = list(image.to(self.device) for image in images)
+            for batch in loader:
+                images = list(image.to(self.device) for image in batch['X'])
                 outputs = model(images)
 
                 # del images
                 torch.cuda.empty_cache()
 
-                results += self.eval_batch(true_masks, outputs, filenames)
+                results += self.eval_batch(batch['masks_2d'], outputs, batch['file_names'])
                
             loader_results = compute_metrics(results, print_metrics=False, prefix=prefix)
         return loader_results
