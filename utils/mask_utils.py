@@ -7,6 +7,7 @@ import torch
 import os
 from pathlib import Path
 import imageio.v2 as imageio
+import cv2
 
 def get_bbox_from_mask(mask):
     rows = np.any(mask, axis=1)
@@ -105,3 +106,18 @@ def extract_non_overlapping_crops_from_loader(loader, val_loader, folder=None, c
             if folder:
                 path_prefix = os.path.join(folder, Path(filename).stem)
                 store_crops(crops=crops, bboxes=bboxes, path_prefix=path_prefix, exclude_edgecases=exclude_edgecases, image=image)
+
+# From https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
+def create_circular_mask(h, w, centre=None, radius=None):
+    Y, X = np.ogrid[:h, :w]
+    dist_from_centre = np.sqrt((X - centre[0])**2 + (Y-centre[1])**2)
+
+    mask = dist_from_centre <= radius
+    return mask
+
+def resize(img, shape):
+    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
+
+# Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
+def resize_mask(img, shape):
+    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)

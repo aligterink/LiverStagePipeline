@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'LiverStagePipeline')
 
 import numpy as np
 import utils.data_utils as data_utils

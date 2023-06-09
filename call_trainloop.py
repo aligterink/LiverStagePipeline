@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'LiverStagePipeline')
 
 # from torchvision import disable_beta_transforms_warning
 # disable_beta_transforms_warning()
@@ -73,15 +73,15 @@ model = get_models.maskrcnn('resnet101')
 optimizer = optim.Adam(model.parameters(), lr=0.002, weight_decay=0.00005, amsgrad=True)
 scheduler = StepLR(optimizer, step_size=50, gamma=0.1)
 
-train.train(model, train_loader, evaluator, num_epochs=100, optimizer=optimizer, scheduler=scheduler, print_every=1, 
-            device=device, log_file=log_file, figure_file=figure_file, model_path=model_file, eval_trainloader=False, 
-            metric_for_best='test_aP', 
-            printed_vals=['test_aP', 'test_precision', 'test_recall', 'train_aP', 'train_precision', 'train_recall'])
+# train.train(model, train_loader, evaluator, num_epochs=100, optimizer=optimizer, scheduler=scheduler, print_every=1, 
+#             device=device, log_file=log_file, figure_file=figure_file, model_path=model_file, eval_trainloader=False, 
+#             metric_for_best='test_aP', 
+#             printed_vals=['test_aP', 'test_precision', 'test_recall', 'train_aP', 'train_precision', 'train_recall'])
 
-evaluator.store = True
-model.load_state_dict(torch.load(model_file))
-res = evaluator.eval_test(model)
-print(res)
+# evaluator.store = True
+# model.load_state_dict(torch.load(model_file))
+# res = evaluator.eval_test(model)
+# print(res)
 
 
 

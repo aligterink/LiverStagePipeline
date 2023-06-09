@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'LiverStagePipeline')
 
 from utils import data_utils
 
@@ -103,4 +103,11 @@ if __name__ == "__main__":
     tif_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04/"
     seg_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04_watershed"
     
+    # Channel starts counting the channels from 0
     segment_dir(tif_dir, seg_dir, threads=40, channel=1, resize_shape=(1040, 1392))
+
+# strain
+# -- day
+# -----experiment1
+# -----experiment2
+# --day2

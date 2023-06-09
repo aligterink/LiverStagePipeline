@@ -1,0 +1,6 @@
+napari[all]
+imageio
+numpy
+Pillow
+scikit-learn
+# opencv-python

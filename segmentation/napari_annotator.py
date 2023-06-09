@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'LiverStagePipeline')
 
 from utils import data_utils
 
@@ -10,6 +10,8 @@ import os
 from PIL import Image
 import numpy as np
 from pathlib import Path
+
+global file_index 
 
 ### Settings
 tif_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04"
@@ -27,18 +29,15 @@ toggle_labels = 'e'
 # Indices in these lists coincide with the indices of the layers. 
 # E.g. the first layer toggle key will toggle the first layer.
 layer_minimal_contrast = [100, 200, 200, 200, 200]
-layer_maximal_contrast = [2000, 700, 1200, 2000, 800]
+layer_maximal_contrast = [2000, 4000, 1200, 2000, 800]
 layer_toggle_keys = ['q', 'w', 'z', 'x', 'b']
 layer_names = ['blue', 'red', 'cyan', 'green', 'some other layer']
 layer_initial_visibility = [False, True, False, False, False]
 layer_colormaps = ['blue', 'red', 'cyan', 'green', 'yellow']
 
 
-
 # Initialize files
 tif_files, seg_files = data_utils.get_two_sets(tif_dir, seg_dir, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-
-global file_index 
 file_index = tif_files.index(os.path.join(tif_dir, starting_tif))
 
 # create viewer

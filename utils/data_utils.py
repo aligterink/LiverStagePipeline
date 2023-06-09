@@ -6,8 +6,6 @@ from pathlib import Path
 import re
 from sklearn.model_selection import train_test_split
 from PIL import Image
-import cv2
-
         
 # Get a list of paths from files in specified directory
 def get_paths(folder, extension='', recursive=True, substring=None):
@@ -123,13 +121,6 @@ def find_stem_in_other_folder(folder, stem):
 def get_corresponding_paths(paths, old_dir, new_dir):
     return [os.path.join(new_dir, os.path.relpath(path, old_dir)) for path in paths]
 
-def resize(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
-
-# Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
-def resize_mask(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
-
 def normalize(img, old_range, new_range=(-1, +1)):
     img -= old_range[0]
     img /= old_range[1] / (new_range[1] - new_range[0])
@@ -156,14 +147,6 @@ def find_folder_range(image_paths, channels):
             range_dict[folder][channel] = (min(range_dict[folder][channel][0], np.min(imageio.mimread(path, memtest=False)[channel])), 
                                            max(range_dict[folder][channel][1], np.max(imageio.mimread(path)[channel])))
     return range_dict
-
-    # range_dict = {fp: [(999999999, 0)]*len(channels) for fp in folder_paths}
-    # for path in image_paths:
-    #     folder = os.path.dirname(path)
-    #     for i, channel in enumerate(channels):
-    #         range_dict[folder][i] = (min(range_dict[folder][i][0], np.min(imageio.mimread(path, memtest=False)[channel])), max(range_dict[folder][i][1], np.max(imageio.mimread(path)[channel])))
-    # return range_dict
-
 
 if __name__ == "__main__":
     tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"
