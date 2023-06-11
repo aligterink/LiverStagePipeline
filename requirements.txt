@@ -1,6 +1,11 @@
-napari[all]
-imageio
 numpy
+imageio
+matplotlib
 Pillow
 scikit-learn
-# opencv-python
+opencv-python-headless
+scikit-image
+torch --pre  
+torchvision --index-url https://download.pytorch.org/whl/nightly/cu121
+timm
+napari[all]

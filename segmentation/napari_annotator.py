@@ -14,8 +14,8 @@ from pathlib import Path
 global file_index 
 
 ### Settings
-tif_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04"
-seg_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04_watershed/"
+tif_dir = "/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04"
+seg_dir = "/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04_watershed/"
 starting_tif = "Exp2021025A-01-Scene-03-B4-B04_series_1_Exp2021025A-01-Scene-03-B4-B04.tif"
 
 remove_all_labels_key = 't'

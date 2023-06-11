@@ -132,8 +132,8 @@ if __name__ == "__main__":
     #         #    "/mnt/DATA1/anton/pipeline_files/results/segmentation_collection/best_yet_clusterAug/", 
     #            "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed_normtest"]
     
-    tif_dir = "/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04/"
-    seg_dir = ["/mnt/DATA1/anton/data/high_res_subset_from_Felix/B04_watershed"]
+    tif_dir = "/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04/"
+    seg_dir = ["/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04_watershed"]
     show_folder(tif_dir, seg_dir, colormaps=colormaps, titles=titles)
 
     # tif_file = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_tifs/Experiment 2019003/tif/2019003_D3_135_hsp_20x_2_series_22_TileScan_001.tif"

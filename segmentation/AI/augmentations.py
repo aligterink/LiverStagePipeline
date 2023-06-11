@@ -18,7 +18,6 @@ import utils.mask_utils as mask_utils
 import math
 import glob
 from skimage import filters
-import opensimplex
 from skimage import io, filters
 
 
