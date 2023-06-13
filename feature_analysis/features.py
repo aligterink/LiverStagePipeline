@@ -41,7 +41,9 @@ class Extractor:
         self.parasite_centre_distance_matrix = None
 
     def get_channel(self, channel):
-        if channel == 'mask':
+        if channel == None:
+            return None
+        elif channel == 'mask':
             return self.mask
         else: 
             return self.intensity_image[:, :, channel]
@@ -100,7 +102,6 @@ class Extractor:
             self.avg_intensities[channel] = np.average(self.get_channel(channel))
         return self.avg_intensities[channel]
     
-
     ########################## Cell-specific features
 
     ###### Mask features
@@ -214,13 +215,23 @@ def collect_features_from_path(tif_path, seg_path, feature_dict):
     tif = np.array(imageio.mimread(tif_path, memtest=False)).transpose(1, 2, 0)
     extractor = Extractor(mask, tif, Path(tif_path).stem)
     features = extractor.get_features(feature_dict)
-    df = pd.concat([df, features])
-    return df
+    return features
 
 def collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path=None, append=False, overwrite=False):
     df = pd.DataFrame()
     for tif_path, seg_path in zip(tif_paths, seg_paths):
-        df = collect_features_from_path(tif_path, seg_path, feature_dict)
+        file_props = collect_features_from_path(tif_path, seg_path, feature_dict)
+
+        match = re.search(r"D(\d+)", tif_path)
+        number = int(match.group(1))
+        file_props['day'] = number
+
+        match = re.search(r"NF(\d+)", tif_path)
+        number = int(match.group(1))
+        file_props['strain'] = number
+
+        df = pd.concat([df, file_props])
+
 
     if csv_path:
         isfile = Path(csv_path).is_file()
@@ -237,33 +248,33 @@ def collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_path=
 
 
 if __name__ == '__main__':
-    # mask_features = ['area', 'area_convex', 'area_filled', 'axis_major_length', 'axis_minor_length', 'eccentricity', 'equivalent_diameter_area', 
-    #                  'extent', 'feret_diameter_max', 'orientation', 'perimeter', 'perimeter_crofton', 'solidity', 
-    #                  'avg_(1)_NN_distance', 'avg_(3)_NN_distance', 'avg_(5)_NN_distance',
-    #                  'parasites_within_(300)px', 'parasites_within_(600)px']
-    # default_channel_features = ['avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
-    #                             'avg_(200)px_radius_intensity']
-
-    # feature_dict = {
-    #     'mask': ('', mask_features), 
-    #     0: ('dapi', default_channel_features), 
-    #     1: ('hsp', default_channel_features)
-    # }
-
-    # tif_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/images"
-    # seg_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation"
-    # csv_file = "/mnt/DATA1/anton/pipeline_files/results/features/lowres_dataset_selection_features.csv"
-
-    # collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_file, overwrite=True)
+    mask_features = ['area', 'area_convex', 'area_filled', 'axis_major_length', 'axis_minor_length', 'eccentricity', 'equivalent_diameter_area', 
+                     'extent', 'feret_diameter_max', 'orientation', 'perimeter', 'perimeter_crofton', 'solidity', 
+                     'avg_(1)_NN_distance', 'avg_(3)_NN_distance', 'avg_(5)_NN_distance',
+                     'parasites_within_(300)px', 'parasites_within_(600)px']
+    default_channel_features = ['avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
+                                'avg_(200)px_radius_intensity']
 
     feature_dict = {
-        'mask': ('', []), 
-        0: ('dapi', ['num_local_maxima']), 
-        1: ('hsp', [])
+        'mask': ('', mask_features), 
+        0: ('dapi', default_channel_features), 
+        1: ('hsp', default_channel_features)
     }
 
-    tif_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_6_TileScan_001.tif"
-    seg_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_6_TileScan_001.png"
+    tif_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/images"
+    seg_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation"
+    csv_file = "/mnt/DATA1/anton/pipeline_files/results/features/lowres_dataset_selection_features.csv"
 
-    df = collect_features_from_path(tif_path, seg_path, feature_dict)
-    print(df)
+    collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_file, overwrite=True)
+
+    # feature_dict = {
+    #     'mask': ('', []), 
+    #     0: ('dapi', ['num_local_maxima']), 
+    #     1: ('hsp', [])
+    # }
+
+    # tif_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_6_TileScan_001.tif"
+    # seg_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_6_TileScan_001.png"
+
+    # df = collect_features_from_path(tif_path, seg_path, feature_dict)
+    # print(df)
