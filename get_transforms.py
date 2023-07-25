@@ -31,7 +31,8 @@ def v1(crops_folder):
                         # transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1,6.0))], p=0.3),
 
                         # RevertNormalizationSingleChannel()
-                        ])
+                        ]),
+                    2: transforms.Compose([])
                     }
 
     train_transform = transforms.Compose([
@@ -80,35 +81,35 @@ def v1(crops_folder):
         # #                     ])}
         # #                 )], p=0.5),
 
-        transforms.RandomApply([ClusterCopyPaste(folder=crops_folder, min_objs_per_obj=2, max_objs_per_obj=5,
-                        transform=transforms.Compose([ # transformations for the pasted crops
-                            # transforms.RandomRotation(degrees=(0, 360), expand=True),
-                            # transforms.RandomApply([transforms.RandomResize(min_size=20, max_size=60)], p=1)
-                        ]),
-                        individual_transform=
-                        {0: transforms.Compose([ # individual transformations for the pasted crops
-                            # CustomNormalizeSingleChannel(),
-                            # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.2, saturation=0.2, hue=0.2)], p=1),
-                            # RevertNormalizationSingleChannel()
-                            # CustomBlur(0.05)
+        # transforms.RandomApply([ClusterCopyPaste(folder=crops_folder, min_objs_per_obj=2, max_objs_per_obj=5,
+        #                 transform=transforms.Compose([ # transformations for the pasted crops
+        #                     # transforms.RandomRotation(degrees=(0, 360), expand=True),
+        #                     # transforms.RandomApply([transforms.RandomResize(min_size=20, max_size=60)], p=1)
+        #                 ]),
+        #                 individual_transform=
+        #                 {0: transforms.Compose([ # individual transformations for the pasted crops
+        #                     # CustomNormalizeSingleChannel(),
+        #                     # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.2, saturation=0.2, hue=0.2)], p=1),
+        #                     # RevertNormalizationSingleChannel()
+        #                     # CustomBlur(0.05)
 
-                        ]),
-                        1: transforms.Compose([ # individual transformations for the pasted crops
-                            # CustomNormalizeSingleChannel(),
-                            # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.2, saturation=0.2, hue=0.2)], p=1),
-                            # transforms.RandomApply([CustomGaussianBlur()], p=1),
-                            # RevertNormalizationSingleChannel()
-                            # CustomBlur(0.2),
+        #                 ]),
+        #                 1: transforms.Compose([ # individual transformations for the pasted crops
+        #                     # CustomNormalizeSingleChannel(),
+        #                     # transforms.RandomApply([transforms.ColorJitter(brightness=0.3, contrast=0.2, saturation=0.2, hue=0.2)], p=1),
+        #                     # transforms.RandomApply([CustomGaussianBlur()], p=1),
+        #                     # RevertNormalizationSingleChannel()
+        #                     # CustomBlur(0.2),
 
-                            # GaussianNoise(0.2),
-                            # GaussianFilter(sigma=1),
-                            # SizeAdjustedPytorchGaussianBlur()
+        #                     # GaussianNoise(0.2),
+        #                     # GaussianFilter(sigma=1),
+        #                     # SizeAdjustedPytorchGaussianBlur()
 
-                            # GaussianNoise(0.35),
-                            # GaussianFilter(sigma=0.8)
-                        ])
-                        }
-                    )], p=1),
+        #                     # GaussianNoise(0.35),
+        #                     # GaussianFilter(sigma=0.8)
+        #                 ])
+        #                 }
+        #             )], p=1),
         
         # transforms.RandomApply([GaussianNoise()], p=0.3),
 

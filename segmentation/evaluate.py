@@ -159,15 +159,6 @@ def collapse_3dmasks(tensor, device):
     
     return out_tensor.cpu().numpy()
 
-# def eval_folder(pred_folder, true_folder, results_file, substring=None, seg_channel=None):
-#     masks_true, masks_pred = data_utils.get_two_sets(true_folder, pred_folder, substring=substring, channel_dir2=seg_channel)
-#     eval(masks_true, masks_pred, identifier=substring, results_file=results_file)
-
-# def eval_multiple_folders(pred_folder, true_folder, results_file, substrings):
-#     for substring in substrings:
-#         eval_folder(pred_folder, true_folder, results_file=results_file, substring=substring)
-#         print('\n')
-
 def eval_folder(true_folder, seg_folder, results_file=None, substring=None, seg_channel=None):
     paths_masks_true, paths_masks_pred = data_utils.get_two_sets(true_folder, seg_folder, common_subset=True, substring=substring, return_paths=True, extension_dir1='.png', extension_dir2='.png')
     results = [eval(imageio.v3.imread(true_path), imageio.v3.imread(pred_path)) for true_path, pred_path in zip(paths_masks_true, paths_masks_pred)]

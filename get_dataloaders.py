@@ -4,7 +4,7 @@ import os
 import segmentation.evaluate as evaluate
 import torch
 import segmentation.AI.train as train
-import segmentation.AI.dataset as dataset
+import segmentation.AI.datasets as datasets
 from utils import mask_utils, cell_viewer
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -12,6 +12,9 @@ import get_models as get_models
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import glob
+from transformers import MaskFormerImageProcessor
+
+processor = MaskFormerImageProcessor()
 
 # Filters out images with empty masks which are not accepted by mask R-CNN
 def collate_fn_MRCNN_train(batch):
@@ -27,17 +30,32 @@ def collate_fn_MRCNN_train(batch):
     return new_batch
 
 def collate_fn_MRCNN_test(batch):
-    new_batch = {}
+    # new_batch = {
+    #     'X': [sample['image'] for sample in batch],
+    #     'y': [{k: sample[k] for k in ('boxes','labels','masks')} for sample in batch],
+    #     'file_names': [sample['name'] for sample in batch],
+    #     'masks_2d': [sample['mask_2d'] for sample in batch]
+    # }
     new_batch = {
-        'X': [sample['image'] for sample in batch],
-        'y': [{k: sample[k] for k in ('boxes','labels','masks')} for sample in batch],
-        'file_names': [sample['name'] for sample in batch],
-        'masks_2d': [sample['mask_2d'] for sample in batch]
+        'X': [sample['image'] for sample in batch if 'image' in sample],
+        'y': [{k: sample[k] for k in ('boxes', 'labels', 'masks') if k in sample} for sample in batch],
+        'file_paths': [sample['file_path'] for sample in batch if 'file_path' in sample],
+        'masks_2d': [sample['mask_2d'] for sample in batch if 'mask_2d' in sample]
     }
     return new_batch
 
+def collate_fn_maskformer(batch):
+    pixel_values = torch.stack([example["image"] for example in batch])
+    pixel_mask = torch.stack([example["mask_2d"] for example in batch])
+    class_labels = [example["labels"] for example in batch]
+    mask_labels = [example["mask_3d"] for example in batch]
+    return {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "class_labels": class_labels, "mask_labels": mask_labels}
+
 
 def v3(train_transform, train_individual_transform, batch_size, num_workers, crops_folder):
+    collate_fn_train = collate_fn_maskformer
+    collate_fn_test = collate_fn_maskformer
+    compute_3d_mask = True
 
     testset_names, test_sets, X_train, y_train = [], [], [], []
 
@@ -60,17 +78,18 @@ def v3(train_transform, train_individual_transform, batch_size, num_workers, cro
             X_train += strainday_X_train
             y_train += strainday_y_train
 
-            test_sets.append(dataset.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=None, folder_normalize=True))
+            test_sets.append(datasets.MicroscopyDataset(strainday_X_test, strainday_y_test, filter_empty=False, transform=None, folder_normalize=True, compute_3d_mask=compute_3d_mask))
 
-    dummy_trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=None, individual_transform=None)
-    dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_MRCNN_train)
+    dummy_trainset = datasets.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=None, individual_transform=None, compute_3d_mask=compute_3d_mask)
+    dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_train)
 
-    trainset = dataset.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform, folder_normalize=True)
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_MRCNN_train)
+    trainset = datasets.MicroscopyDataset(X_train, y_train, filter_empty=True, transform=train_transform, individual_transform=train_individual_transform, folder_normalize=True, compute_3d_mask=compute_3d_mask)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=num_workers,shuffle=True, collate_fn=collate_fn_train)
 
-    cell_viewer.show_dataset(trainset)
+    trainset[0]
+    # cell_viewer.show_dataset(trainset)
 
-    test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn_MRCNN_test) for test_set in test_sets] # old collate: lambda x:list(zip(*x))
+    test_loaders = [torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn_test) for test_set in test_sets]
     return train_loader, test_loaders, testset_names, dummy_train_loader
 
 

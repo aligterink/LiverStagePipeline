@@ -7,7 +7,6 @@ import torch
 import os
 from pathlib import Path
 import imageio.v2 as imageio
-import cv2
 
 def get_bbox_from_mask(mask):
     rows = np.any(mask, axis=1)
@@ -111,13 +110,17 @@ def extract_non_overlapping_crops_from_loader(loader, val_loader, folder=None, c
 def create_circular_mask(h, w, centre=None, radius=None):
     Y, X = np.ogrid[:h, :w]
     dist_from_centre = np.sqrt((X - centre[0])**2 + (Y-centre[1])**2)
-
     mask = dist_from_centre <= radius
     return mask
 
-def resize(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
+# for a grayscale image, set all pixels of a binary mask to zero.
+def subtract_mask(img, mask):
+    return np.where(mask > 0, 0, img)
 
-# Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
-def resize_mask(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
+# Given a single pixel-wise mask of [H, W], generate a binary mask [n, H, W] where each n represents a different object
+def mask_2d_to_3d(mask_2d):
+    ids = np.unique(mask_2d)[1:]
+    mask_3d = np.zeros((len(ids), mask_2d.shape[0], mask_2d.shape[1]), dtype=bool)
+    for i, id in enumerate(ids):
+        mask_3d[i,:,:][mask_2d == id] = True
+    return mask_3d

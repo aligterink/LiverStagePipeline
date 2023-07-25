@@ -16,11 +16,11 @@ def get_paths(folder, extension='', recursive=True, substring=None):
     paths.sort(key=lambda path: Path(path).stem)
     return paths
 
-# Get subset of paths in paths_to_subset of which the stem also occurs in leading_paths
-def get_paths_subset(leading_paths, paths_to_subset):
-    subset = [path for path in paths_to_subset if Path(path).stem in [Path(path).stem for path in leading_paths]]
-    subset.sort(key=lambda path: Path(path).stem)
-    return subset
+# # Get subset of paths in paths_to_subset of which the stem also occurs in leading_paths
+# def get_paths_subset(leading_paths, paths_to_subset):
+#     subset = [path for path in paths_to_subset if Path(path).stem in [Path(path).stem for path in leading_paths]]
+#     subset.sort(key=lambda path: Path(path).stem)
+#     return subset
 
 # Verify if two lists of paths contain identical file names
 def compare_path_lists(pathlist1, pathlist2):
@@ -29,12 +29,12 @@ def compare_path_lists(pathlist1, pathlist2):
 def get_image_array(dir, files, channel):
     return np.array([imageio.mimread(os.path.join(dir, f))[channel] for f in files])
 
-def get_mask_array(dir):
-    paths = get_paths(dir, extension='.png', recursive=True)
-    return np.array([imageio.mimread(paths) for p in paths])
+# def get_mask_array(dir):
+#     paths = get_paths(dir, extension='.png', recursive=True)
+#     return np.array([imageio.mimread(paths) for p in paths])
 
-def get_mask_array_from_paths(paths):
-    return np.array([imageio.mimread(paths) for p in paths])
+# def get_mask_array_from_paths(paths):
+#     return np.array([imageio.mimread(paths) for p in paths])
 
 def get_data_from_paths(paths, extension, channel=None, array=False):
     if extension == '.tif':
@@ -56,9 +56,6 @@ def get_common_subset(paths_dir1, paths_dir2):
     # paths_dir1, paths_dir2 = zip(*sorted(zip(paths_dir1, paths_dir2), key=lambda x: common_stems.index(Path(x[0]).stem)))
     return paths_dir1, paths_dir2
 
-from pathlib import Path
-
-from pathlib import Path
 
 def intersection_of_lists(tuples_of_lists):
     dicts = [{Path(path).stem: path for path in path_list} for path_list in tuples_of_lists]
@@ -104,9 +101,9 @@ def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1
         else:
             return X1, X2
 
-# Returns a list of images
-def get_image_list(paths):
-    return [imageio.mimread(p) for p in paths]
+# # Returns a list of images
+# def get_image_list(paths):
+#     return [imageio.mimread(p) for p in paths]
 
 # Given a folder and a file stem, return paths of all files in folder with said stem
 def find_stem_in_other_folder(folder, stem):
@@ -145,8 +142,15 @@ def find_folder_range(image_paths, channels):
         folder = os.path.dirname(path)
         for channel in channels:
             range_dict[folder][channel] = (min(range_dict[folder][channel][0], np.min(imageio.mimread(path, memtest=False)[channel])), 
-                                           max(range_dict[folder][channel][1], np.max(imageio.mimread(path)[channel])))
+                                           max(range_dict[folder][channel][1], np.max(imageio.mimread(path, memtest=False)[channel])))
     return range_dict
+
+# def resize(img, shape):
+#     return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
+
+# # Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
+# def resize_mask(img, shape):
+#     return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
 
 if __name__ == "__main__":
     tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"

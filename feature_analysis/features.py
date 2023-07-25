@@ -1,6 +1,12 @@
 import sys
 import os
-sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'LiverStagePipeline')
+sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+
+
+# lowest_folder = next((root for root, dirs, files in os.walk(os.path.dirname(os.path.abspath(__file__))) if 'requirements.txt' in files), None)
+# print(lowest_folder, os.path.dirname(os.path.abspath(__file__)))
+# for root, dirs, files in os.walk(os.path.dirname(os.path.abspath(__file__))):
+#     print(root, dirs, files)
 
 import imageio.v3
 from utils import data_utils, mask_utils
@@ -210,28 +216,31 @@ class Extractor:
     def get_avg_npx_radius_intensity(self, channel, label, radius):
         return np.mean(self._get_npx_radius_intensity(channel, label, radius))
 
-def collect_features_from_path(tif_path, seg_path, feature_dict):
+def collect_features_from_path(tif_path, seg_path, feature_dict, metadata_func=None):
     mask = imageio.v3.imread(seg_path)
     tif = np.array(imageio.mimread(tif_path, memtest=False)).transpose(1, 2, 0)
+    
     extractor = Extractor(mask, tif, Path(tif_path).stem)
     features = extractor.get_features(feature_dict)
+    if metadata_func:
+        metadata = metadata_func(tif_path, seg_path)
+        metadata = {k: [v]*len(features) for k,v in metadata.items()}
+
+        metadata = pd.DataFrame(metadata)
+        label_index = features.columns.get_loc('label') + 1
+        # print('f', features)
+        # print('m', metadata)
+        # features = pd.concat([features.iloc[:label_index], metadata, features.iloc[label_index:]])
+        features = pd.concat([metadata, features], ignore_index=False, axis=1)
+    # print(features)
     return features
 
-def collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path=None, append=False, overwrite=False):
+def collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path=None, append=False, overwrite=False, metadata_func=None):
     df = pd.DataFrame()
-    for tif_path, seg_path in zip(tif_paths, seg_paths):
-        file_props = collect_features_from_path(tif_path, seg_path, feature_dict)
-
-        match = re.search(r"D(\d+)", tif_path)
-        number = int(match.group(1))
-        file_props['day'] = number
-
-        match = re.search(r"NF(\d+)", tif_path)
-        number = int(match.group(1))
-        file_props['strain'] = number
-
+    for tif_path, seg_path, i in zip(tif_paths, seg_paths, range(len(tif_paths))):
+        print('{} / {}'.format(i, len(tif_paths)))
+        file_props = collect_features_from_path(tif_path, seg_path, feature_dict, metadata_func)
         df = pd.concat([df, file_props])
-
 
     if csv_path:
         isfile = Path(csv_path).is_file()
@@ -241,15 +250,74 @@ def collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path=Non
     print('{} features extracted from {} cells in {} images.'.format(sum([len(x[1]) for x in feature_dict.values()]), len(df.index), len(tif_paths)))
     return df
 
-def collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_path=None, append=False, overwrite=False):
+def collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_path=None, append=False, overwrite=False, metadata_func=None):
     tif_paths, seg_paths = data_utils.get_two_sets(tif_folder, seg_folder, extension_dir1='.tif', extension_dir2='.png', common_subset=True, return_paths=True)
-    df = collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path, append, overwrite)
+    df = collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path, append, overwrite, metadata_func)
     return df
 
+def FoI_metadata(tif_path, seg_path):
+    
+    foi_substring = Path(tif_path).stem.split('_')[2]
+    if foi_substring.startswith('D'):
+        foi_substring = Path(tif_path).stem.split('_')[3]
+
+    foi_substring = foi_substring.strip('h')
+
+    x = re.split('to|s|-', foi_substring)
+    x = list(filter(None, x))
+
+    # Extract the substring between the first and second '_' in the file name
+    match = re.search(r"_(.*?)_", Path(tif_path).stem)
+    if match:
+        substring = match.group(1)
+
+        # Detect the number using regular expressions
+        number_match = re.search(r"(nf|NF)?(175|135|54)", substring, re.IGNORECASE)
+        if number_match:
+            detected_number = int(number_match.group(2))
+        elif substring == "L1":
+            detected_number = 54
+        else:
+            print("Number not found.")
+    else:
+        print("Substring not found.")
+
+    meta_data = {
+        'force_of_infection': '{}s-{}h'.format(x[0], x[1]),
+        'force_of_infection_ratio': int(x[0]) / int(x[1]),
+        # 'day': int(re.search(r"D(\d+)", tif_path).group(1)),
+        # 'strain': int(re.search(r"NF(\d+)", tif_path).group(1))
+        'strain': detected_number
+    }
+    return meta_data
+
+
+def GS_metadata(tif_path, seg_path):
+
+    file = Path(tif_path).stem
+    splits = file.split('_')
+
+    if 'D3' in file:
+        day = 3
+    elif 'D5' in file:
+        day = 5
+    elif 'D7' in file:
+        day = 7
+    else:
+        day = 3
+
+    if any(substring in file for substring in ['_54', '_NF54', '_nf54']):
+        strain = 54
+    elif any(substring in file for substring in ['_135', '_NF135', '_nf135']):
+        strain = 135
+    elif any(substring in file for substring in ['_175', '_NF175', '_nf175']):
+        strain = 175
+
+    return {'day': day, 'strain': strain}
 
 if __name__ == '__main__':
     mask_features = ['area', 'area_convex', 'area_filled', 'axis_major_length', 'axis_minor_length', 'eccentricity', 'equivalent_diameter_area', 
-                     'extent', 'feret_diameter_max', 'orientation', 'perimeter', 'perimeter_crofton', 'solidity', 
+                     'extent', 'feret_diameter_max', 'perimeter', 'perimeter_crofton', 'solidity', 
                      'avg_(1)_NN_distance', 'avg_(3)_NN_distance', 'avg_(5)_NN_distance',
                      'parasites_within_(300)px', 'parasites_within_(600)px']
     default_channel_features = ['avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
@@ -258,15 +326,15 @@ if __name__ == '__main__':
     feature_dict = {
         'mask': ('', mask_features), 
         0: ('dapi', default_channel_features), 
-        1: ('hsp', default_channel_features)
+        1: ('hsp', default_channel_features),
+        -1: ('hgs', default_channel_features)
     }
 
-    tif_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/images"
-    seg_folder = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation"
-    csv_file = "/mnt/DATA1/anton/pipeline_files/results/features/lowres_dataset_selection_features.csv"
+    tif_folder = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_tifs"
+    seg_folder = "/mnt/DATA1/anton/pipeline_files/segmentation/segmentations/GS_validation_all_untreated_2_copypaste_1806"
+    csv_file = "/mnt/DATA1/anton/pipeline_files/feature_analysis/features/untreated_GS_validation_features.csv"
 
-    collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_file, overwrite=True)
-
+    x = collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_file, overwrite=True, metadata_func=GS_metadata)
     # feature_dict = {
     #     'mask': ('', []), 
     #     0: ('dapi', ['num_local_maxima']), 

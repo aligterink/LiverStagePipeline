@@ -11,7 +11,7 @@ from collections import OrderedDict
 from tqdm import tqdm
 
 def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, print_every, device, log_file=None, figure_file=None, model_path=None, 
-          early_stop=300, eval_trainloader=False, metric_for_best='aP', printed_vals=None):
+          early_stop=300, eval_trainloader=False, metric_for_best='aP', printed_vals=None, gradient_clipping=None):
     """
     Trains a PyTorch model on a training dataset and evaluates on a test dataset.
 
@@ -40,26 +40,34 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
         for batch in tqdm(train_loader, leave=False):
 
             # Send the data to the device
-            X = list(image.to(device) for image in batch['X'])
-            y = [{k: v.to(device) for k, v in t.items()} for t in batch['y']]
+            # X = list(image.to(device) for image in batch['X'])
+            # y = [{k: v.to(device) for k, v in t.items()} for t in batch['y']]
 
             # Zero the gradients
             optimizer.zero_grad()
 
             # Forward pass
-            output = model(X, y)
-            loss = sum(loss for loss in output.values())
-            epoch_training_loss += loss.item()
+            # output = model(X, y)
+            output = model(
+              pixel_values=batch["pixel_values"].to(device),
+              mask_labels=[labels.to(device) for labels in batch["mask_labels"]],
+              class_labels=[labels.to(device) for labels in batch["class_labels"]],
+            )
+            # loss = sum(loss for loss in output.values())
+            # epoch_training_loss += loss.item()
+
+            loss = output.loss
+            epoch_training_loss += loss
 
             # print([(k,round(output[k].item(), 3)) for k in output.keys()])
 
             # del images
             # del targets
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
             # Backward pass
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping) if gradient_clipping else None
 
             # Update the weights
             optimizer.step()
