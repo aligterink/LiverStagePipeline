@@ -41,23 +41,22 @@ def v1(crops_folder):
         # transforms.RandomApply([transforms.RandomAffine(degrees=(0, 360), translate=(0.1, 0.1), scale=(0.9, 1.3), shear=15)], p=0.3),
         # transforms.RandomApply([transforms.RandomResizedCrop(size=(1040, 1392), antialias=True)], p=0.3),
 
-        # # HSP copy paste
-        # transforms.RandomApply([RandomCopyPaste(folder=crops_folder,
-        #                 channel_paste=[(1, 1)], min_objs=200, max_objs=300,
-        #                 transform=transforms.Compose([ # transformations for the pasted crops
-        #                     transforms.RandomRotation(degrees=(0, 360), expand=True),
-        #                     transforms.RandomApply([transforms.ColorJitter(brightness=(0.4, 1.2), contrast=0.2, saturation=0.2, hue=0.2)], p=0.6),
-        #                     # transforms.RandomApply([transforms.GaussianBlur(kernel_size=(9), sigma=(12))], p=1),
-        #                     transforms.RandomApply([transforms.RandomResize(min_size=8, max_size=20)], p=0.5)
-        #                 ]), individual_transform=
-        #                     {1:transforms.Compose([
-        #                         GaussianNoise(0.35),
-        #                         GaussianFilter(sigma=0.8),
-        #                         # CustomBlur(0.1)
-        #                         # transforms.GaussianBlur(kernel_size=11, sigma=2)
-        #                         # SizeAdjustedPytorchGaussianBlur()
-        #                     ])}
-        #                 )], p=1),
+        # HSP copy paste
+        transforms.RandomApply([RandomCopyPaste(folder=crops_folder, channel_paste=[(1, 1)], min_objs=200, max_objs=300,
+                        transform=transforms.Compose([ # transformations for the pasted crops
+                            # transforms.RandomRotation(degrees=(0, 360), expand=True),
+                            # transforms.RandomApply([transforms.ColorJitter(brightness=(0.4, 1.2), contrast=0.2, saturation=0.2, hue=0.2)], p=0.6),
+                            # transforms.RandomApply([transforms.GaussianBlur(kernel_size=(9), sigma=(12))], p=1),
+                            # transforms.RandomApply([transforms.RandomResize(min_size=8, max_size=20)], p=1)
+                        ]), individual_transform=
+                            {1:transforms.Compose([
+                                # GaussianNoise(0.35),
+                                # GaussianFilter(sigma=0.8),
+                                # CustomBlur(0.1)
+                                # transforms.GaussianBlur(kernel_size=11, sigma=2)
+                                # SizeAdjustedPytorchGaussianBlur()
+                            ])}
+                        )], p=1),
 
 
 

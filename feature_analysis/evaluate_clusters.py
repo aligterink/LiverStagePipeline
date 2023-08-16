@@ -1,25 +1,30 @@
 from sklearn.metrics import silhouette_score
 import numpy as np
 import pandas as pd
+from statistics import mean
 from scipy.spatial import distance_matrix
 from scipy.spatial.distance import squareform
 from scipy.cluster import hierarchy
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
-# Compute the silhouette score between each pair of clusters
+# Compute the silhouette score between each pair of clusters. Returns a distance matrix.
 def get_sillhouette_scores(X, labels):
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
     unique_labels = list(set(labels))
+    unique_scores = []
     scores = pd.DataFrame(np.zeros((len(unique_labels), len(unique_labels))), columns=unique_labels, index=unique_labels)
 
-    for i, label_i in enumerate(unique_labels):
+    for i, label_i in enumerate(tqdm(unique_labels, leave=False)):
         for j, label_j in enumerate(unique_labels):
             if i < j:
                 # mask = labels.isin([label_i, label_j]).to_numpy()
                 mask = np.array([label in [label_i, label_j] for label in labels])#.to_numpy()
                 sub_labels = np.array(labels)[mask]
-                sub_X = X[mask].to_numpy()
+                sub_X = X[mask]
 
                 # sub_labels = sub_labels[:800]
                 # sub_X = sub_X[:800, :]
@@ -27,20 +32,18 @@ def get_sillhouette_scores(X, labels):
                 score = silhouette_score(X=sub_X, labels=sub_labels, metric='euclidean')
                 scores.at[label_i, label_j] = score
                 scores.at[label_j, label_i] = score
-                print('did ', label_i, label_j)
+                unique_scores.append(score)
+                # print('did ', label_i, label_j)
     
-    return scores
+    return mean(unique_scores), scores
 
-def plot_distance_matrix(scores, show=False, save_path=None):
-    plt.figure(figsize=(32,16))
-
-
-    clustermap = sns.clustermap(scores, cmap=sns.light_palette("seagreen", as_cmap=True), method='average', metric='euclidean', annot=True)
+def plot_distance_matrix(scores, title=None, show=False, save_path=None):
+    clustermap = sns.clustermap(scores, cmap=sns.light_palette("seagreen", as_cmap=True), method='average', metric='euclidean', annot=True, figsize=(32,16))
     clustermap.cax.set_visible(False)
     clustermap.ax_row_dendrogram.set_visible(False)
     clustermap.ax_col_dendrogram.set_visible(False)
 
-    plt.tight_layout()
+    # plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path)
@@ -62,10 +65,10 @@ if __name__ == '__main__':
     latent_space = pd.read_csv(latent_space_path)
 
     labels = features[grouping]
-    labels = ['{}_{}'.format(int(strain), foi) for strain, foi in zip(features['strain'], features['force_of_infection'])]
+    # labels = ['{}_{}'.format(int(strain), foi) for strain, foi in zip(features['strain'], features['force_of_infection'])]
     assert all(s.startswith('Latent dimension') for s in latent_space.columns), 'all columns in {} should start with \'Latent dimension\''
     assert len(labels) == len(latent_space), '{} contains {} samples while {} contains {}. These files likely do not match.'.format(features_path, len(features), latent_space_path, len(latent_space))
 
     scores = get_sillhouette_scores(latent_space, labels)
-    print(scores)
+    plot_distance_matrix(scores, title='hi', show=True)
 

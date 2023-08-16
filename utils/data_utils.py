@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 from sklearn.model_selection import train_test_split
 from PIL import Image
+import torch
+import cv2
         
 # Get a list of paths from files in specified directory
 def get_paths(folder, extension='', recursive=True, substring=None):
@@ -118,20 +120,26 @@ def find_stem_in_other_folder(folder, stem):
 def get_corresponding_paths(paths, old_dir, new_dir):
     return [os.path.join(new_dir, os.path.relpath(path, old_dir)) for path in paths]
 
-def normalize(img, old_range, new_range=(-1, +1)):
+def normalize(img, old_range, new_range=(0, +1)):
     img -= old_range[0]
-    img /= old_range[1] / (new_range[1] - new_range[0])
+    img = img / (old_range[1] / (new_range[1] - new_range[0]))
     img += new_range[0]
     return img
 
-def count_cells(annotation_folder, substring=None):
-    paths = get_paths(annotation_folder, extension='.png', recursive=True, substring=substring)
+def count_cells(annotation_folder, substring=None, extension='.png'):
+    paths = get_paths(annotation_folder, extension=extension, recursive=True, substring=substring)
     imgs, cells = len(paths), 0
     for path in paths:
         img = imageio.v2.imread(path)
         cells += len(np.unique(img)) - 1
     print('{} cells in {} images for {}'.format(cells, imgs, annotation_folder))
     return imgs, cells
+
+def recursively_count_cells(folder):
+    count_cells(folder)
+    subfolders = [ f.path for f in os.scandir(folder) if f.is_dir() ]
+    for subfolder in subfolders:
+        recursively_count_cells(subfolder)
 
 # 
 def find_folder_range(image_paths, channels):
@@ -145,12 +153,88 @@ def find_folder_range(image_paths, channels):
                                            max(range_dict[folder][channel][1], np.max(imageio.mimread(path, memtest=False)[channel])))
     return range_dict
 
-# def resize(img, shape):
-#     return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
+def resize(img, shape):
+    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
 
-# # Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
-# def resize_mask(img, shape):
-#     return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
+# Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
+def resize_mask(img, shape):
+    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
+
+def move_to_device(obj, device):
+    if isinstance(obj, torch.Tensor):
+        return obj.to(device)
+    elif isinstance(obj, list):
+        return [move_to_device(item, device) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: move_to_device(value, device) for key, value in obj.items()}
+    else:
+        return obj
+    
+def collate_fn(batch):
+    batch_dict = {}
+    batch_dict.update({'images': [sample["image"] for sample in batch]})
+    batch_dict.update({'masks_2d': [sample["mask_2d"] for sample in batch]})
+    batch_dict.update({'labels': [sample["labels"] for sample in batch]})
+    batch_dict.update({'boxes': [sample['boxes'] for sample in batch]})
+    batch_dict.update({'masks_3d': [sample["mask_3d"] for sample in batch]})
+    batch_dict.update({'file_paths': [sample['file_path'] for sample in batch]})
+    batch_dict.update({'groups': [sample['group'] for sample in batch]}) if 'group' in batch[0].keys() else None
+    return batch_dict
+
+def parse_image(path, channels=None, numpy_dtype=None, torch_dtype=None):
+    image = imageio.mimread(path)
+    channels = [channels] if isinstance(channels, int) else channels
+    
+    if channels:
+        image = [image[channel] for channel in channels]
+
+    if numpy_dtype:
+        image = np.array(image, dtype=numpy_dtype)
+    elif torch_dtype:
+        image = torch.Tensor(image, dtype=torch_dtype)
+    if image.shape[0] == 1:
+        image = image[0, :, :]
+    return image
+
+def save_image(image, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if len(image.shape) < 3:
+        image = np.expand_dims(image, axis=0)
+    imageio.mimwrite(path, image)
+
+# For a given path (source_path), change the shared prefix of source_path and target_folder into the full path of target_folder.
+def change_relative_path(source_path, target_folder):
+    common_prefix = os.path.commonprefix([source_path, target_folder])
+    relative_source_path = os.path.relpath(source_path, common_prefix)
+    new_path = os.path.join(target_folder, relative_source_path)
+    return new_path
+
+def get_common_suffix(path1, path2):
+    # Split paths into directories and filenames
+    dirs1, file1 = os.path.split(path1)
+    dirs2, file2 = os.path.split(path2)
+    
+    # Split directories into components
+    components1 = dirs1.split(os.path.sep)
+    components2 = dirs2.split(os.path.sep)
+    
+    # Reverse the lists of components
+    reversed_components1 = components1[::-1]
+    reversed_components2 = components2[::-1]
+    
+    # Find the length of the common suffix
+    common_length = 0
+    while common_length < min(len(reversed_components1), len(reversed_components2)) and reversed_components1[common_length] == reversed_components2[common_length]:
+        common_length += 1
+    
+    # Reverse the common part back to the correct order
+    common_suffix_components = reversed_components1[:common_length][::-1]
+    
+    # Join the components to form the common suffix path
+    common_suffix = os.path.sep.join(common_suffix_components)
+    
+    return common_suffix
+
 
 if __name__ == "__main__":
     tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"
@@ -160,8 +244,9 @@ if __name__ == "__main__":
     # x = get_image_array(tifdir, get_paths(tifdir), 1)
     # print(len(x))
 
-    tifpaths = get_paths(tifdir, extension='.tif')
-    print(find_folder_range(tifpaths, channels=[0,1,2]))
+    # tifpaths = get_paths(tifdir, extension='.tif')
+    # print(find_folder_range(tifpaths, channels=[0,1,2]))
     # train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
     # # print(next(iter(train_loader))[0].shape)
     # train_loader.__getitem__(2)
+    recursively_count_cells(folder='/mnt/DATA1/anton/data/lowres_dataset_selection/annotation')

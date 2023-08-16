@@ -14,6 +14,7 @@ from torchvision.models.detection.anchor_utils import AnchorGenerator
 
 from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation, Mask2FormerConfig, MaskFormerConfig
 
+from utils import mask_utils
 
 import timm  # timm is a PyTorch library that provides access to pre-trained models
 # from ultralytics import YOLO
@@ -23,29 +24,27 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 from collections import OrderedDict
 import types
+import numpy as np
 
+### Mask R-CNN and helper funcs
+def parse_maskrcnn(model, batch):
+    X = batch['images']
+
+    if all(k in batch for k in ['boxes', 'labels', 'masks_3d']): # when in train mode
+        y = [{'boxes': batch['boxes'][i], 'labels': batch['labels'][i], 'masks': batch['masks_3d'][i]} for i in range(len(batch['images']))]
+        output = model(X, y) # Forward pass
+        loss = sum(loss for loss in output.values())
+        return loss
+
+    else: # when in evaluation mode
+        output = model(X)
+        pred_masks_3d = [sample['masks'].cpu().numpy().squeeze(1) > 0.5 for sample in output]
+        masks_2d = [mask_utils.mask_3d_to_2d(mask) for mask in pred_masks_3d]
+        return masks_2d
     
-def convert_relu_to_leakyrelu(model):
-    for child_name, child in model.named_children():
-        if isinstance(child, torch.nn.ReLU):
-            setattr(model, child_name, torch.nn.LeakyReLU())
-        else:
-            convert_relu_to_leakyrelu(child)
+def maskrcnn(backbone, n_channels=2, pretrained_backbone=False, path=None):
 
-def get_n_params(model):
-    pp=0
-    for p in list(model.parameters()):
-        nn=1
-        for s in list(p.size()):
-            nn = nn*s
-        pp += nn
-    return pp
-    
-
-def maskrcnn(backbone, n_channels=2, leaky_relu=False, printparams=False, pretrained_backbone=False, path=None):
-
-    backbone  = resnet_fpn_backbone(backbone, pretrained=False, trainable_layers=5)
-
+    backbone  = resnet_fpn_backbone(backbone, pretrained=pretrained_backbone, trainable_layers=5)
     model = MaskRCNN(backbone=backbone, num_classes=2, trainable_backbone_layers=5, weights=None)
     
     in_features = model.roi_heads.box_predictor.cls_score.in_features # get number of input features for the classifier
@@ -56,35 +55,62 @@ def maskrcnn(backbone, n_channels=2, leaky_relu=False, printparams=False, pretra
     model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, hidden_layer, 2) # and replace the mask predictor with a new one
 
     model.backbone.body.conv1 = torch.nn.Conv2d(n_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-
     model.transform = torchvision.models.detection.transform.GeneralizedRCNNTransform(min_size=1392, max_size=1392, image_mean=[0] * n_channels, image_std=[1] * n_channels)
-
-    if leaky_relu:
-        model = convert_relu_to_leakyrelu(model)
-    
-    if printparams:
-        print('Parameters: {}'.format(get_n_params(model)))
 
     if path:
         model.load_state_dict(torch.load(path))
 
-    return model
+    return model, parse_maskrcnn
 
 
-def yolo(version='n'):
+def yolo(version='n'): # takes polygon input
     model = YOLO('yolov8{}-seg.pt'.format(version)).model
     old_layer = model.model[0].conv
     model.model[0].conv = nn.Conv2d(2, old_layer.out_channels, kernel_size=old_layer.kernel_size, stride=(1, 1), padding=old_layer.padding, bias=old_layer.bias)
     return model
 
+### Maskformer and helper funcs
+def parse_maskformer(model, batch):
+    # Forward pass
+    output = model(pixel_values=batch['images'], mask_labels=[m.type(torch.float32) for m in batch['masks_3d']], class_labels=batch['labels'])
+
+    processor = MaskFormerImageProcessor()
+    # results = processor.post_process_instance_segmentation(output)# target_sizes=[batch['images'].size[::-1]])
+    results = processor.post_process_instance_segmentation(output, target_sizes=[1392, 1040])
+    print(results[0]['segmentation'].shape)
+
+    return output.loss
+
 def maskformer():
     custom_config = MaskFormerConfig()
     backbone_config = custom_config.backbone_config
-    backbone_config.in_channels = 2 # or num_channels?
+    backbone_config.num_channels = 2
+    # backbone_config.id2label = {0: 'parasite'}
+    backbone_config.image_size = (1392, 1040)
+    backbone_config.in_channels = 2
     custom_config.backbone_config = backbone_config
+    custom_config.mask_feature_size = 1392
+    
     model = MaskFormerForInstanceSegmentation(custom_config)
+    print(custom_config)
     return model
 
 
 if __name__ == '__main__':
-    maskformer()
+    model = maskformer()
+    # pixel_values = torch.rand((12, 3, 1040, 1392))
+    # mask_labels = [torch.rand((12, 3, 1040, 1392)) for i in range(10)]
+    # class_labels = [torch.ones((12)) for i in range(10)]
+    
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+
+    # model = model.to(device)
+    # pixel_values = pixel_values.to(device)
+    # mask_labels = [labels.to(device) for labels in mask_labels]
+    # class_labels = [labels.to(device) for labels in class_labels]
+
+    # output = model(
+    #     pixel_values = pixel_values,
+    #     mask_labels = mask_labels,
+    #     class_labels = class_labels
+    # )

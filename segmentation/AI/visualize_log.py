@@ -74,9 +74,9 @@ def plot_metrics(log_file, save_path="/home/anton/Documents/results/figures/exam
 
     ax2.set_ylabel('Metrics', color='black')  # we already handled the x-label with ax1
 
-    lns += ax2.plot(metrics['epoch'], metrics['test_aP'], label='Test aP')
-    lns += ax2.plot(metrics['epoch'], metrics['test_precision'], label='Test precision')
-    lns += ax2.plot(metrics['epoch'], metrics['test_recall'], label='Test recall')
+    lns += ax2.plot(metrics['epoch'], metrics['aP'], label='Test aP')
+    lns += ax2.plot(metrics['epoch'], metrics['precision'], label='Test precision')
+    lns += ax2.plot(metrics['epoch'], metrics['recall'], label='Test recall')
     
     if 'train_aP' in metrics.keys():
         lns +=  ax2.plot(metrics['epoch'], metrics['train_aP'], label='Train aP')

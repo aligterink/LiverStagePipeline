@@ -16,7 +16,6 @@ class Logger():
         
     def log(self, log_dict):
         time_past = f"{str((datetime.now() - self.starting_time)).split('.')[0]}".replace(':', ';')
-
         if self.track_metric and log_dict[self.metric] > self.best_metric:
             self.best_metric = log_dict[self.metric]
             self.best_epoch = int(log_dict['epoch'])
@@ -30,5 +29,4 @@ class Logger():
                 f.write(line)
 
         return self.best_epoch
-        
         

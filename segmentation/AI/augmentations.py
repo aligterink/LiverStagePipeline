@@ -43,6 +43,13 @@ class RewrittenRandomResize:
         min_size = (sample[0].shape[1] + sample[0].shape[2]) / 2 * self.min_multiplier
         max_size = (sample[0].shape[1] + sample[0].shape[2]) / 2 * self.max_multiplier
         t = transforms.RandomResize(min_size=min_size, max_size=max_size)
+
+class Aug060823:
+    def __init__(self):
+        pass
+
+    def __call__(self, sample):
+        return sample
     
 # TODO implement padding here instead of doing it by hard coding
 # class Pad:
@@ -173,6 +180,7 @@ class RandomCopyPaste:
         self.max_crop_size = max_crop_size
 
     def __call__(self, sample):
+        print(type(sample[0]), )
         img = sample[0]
         img_height, img_width = img.shape[1:]
         reference_intensities = [img[cp[0],:,:][torch.any(sample[2], axis=0)] for cp in self.channel_paste]
@@ -181,21 +189,22 @@ class RandomCopyPaste:
         crop_paths = [os.path.join(self.folder, random.choice(os.listdir(self.folder))) for i in range(num_crops)]
 
         for crop_path in crop_paths:
-            crop = np.array(imageio.mimread(crop_path))
+            crop = torch.Tensor(imageio.mimread(crop_path))
 
-            if not self.min_crop_size <= crop[0].shape[0] <= self.max_crop_size or not self.min_crop_size <= crop[0].shape[1] <= self.max_crop_size:
+            # Verify that crops falls in the specified size range
+            if not self.min_crop_size <= crop.shape[1] <= self.max_crop_size or not self.min_crop_size <= crop.shape[2] <= self.max_crop_size:
                 continue
 
             # crop = np.pad(crop, ((0,0),(2,2),(2,2)))
-            mask = np.any(crop, axis=0)
+            mask = torch.any(crop, axis=0).numpy()
 
-            crop = torch.tensor(crop).unsqueeze(1)
+            # crop = torch.tensor(crop)
 
             # transform crop
             if self.individual_transform:
                 for c in [cp[0] for cp in self.channel_paste]:
-                    channel = self.individual_transform[c](crop[c,:,:,:])
-                    crop[c,:,:,:] = torch.squeeze(channel)
+                    channel = self.individual_transform[c](crop[c,:,:])
+                    crop[c,:,:] = channel
             
             if self.transform:
                 crop, mask = self.transform(crop, datapoints.Mask(mask))
@@ -203,7 +212,7 @@ class RandomCopyPaste:
             # crop = normalizeCrop(reference_intensities, crop, self.channel_paste, mask)
 
             # Get dimensions of crop
-            crop_height, crop_width = crop.shape[2], crop.shape[3]
+            crop_height, crop_width = crop.shape[1], crop.shape[2]
 
             # Determine random pasting area
             min_x = np.random.randint(0, img_width - crop_width)
@@ -212,8 +221,7 @@ class RandomCopyPaste:
 
             # Paste
             for paste in self.channel_paste:
-                img[paste[1], min_y:max_y, min_x:max_x] = torch.maximum(img[paste[1], min_y:max_y, min_x:max_x], torch.Tensor(crop[paste[0],:,:,:]))
-
+                img[paste[1], min_y:max_y, min_x:max_x] = torch.maximum(img[paste[1], min_y:max_y, min_x:max_x], torch.Tensor(crop[paste[0],:,:]))
         return (img, *sample[1:])
 
 class ClusterCopyPaste:

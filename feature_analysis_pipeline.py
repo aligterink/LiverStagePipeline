@@ -100,7 +100,7 @@ for feature in features_for_distance_matrix:
     figure_path = os.path.join(paths['FA_latent_space_matrices_folder'], '{}_silhouette_scores_of_{}.png'.format(identifier, feature))
     labels = df[feature]
 
-    scores = evaluate_clusters.get_sillhouette_scores(latent_space_df, labels)
+    mean, scores = evaluate_clusters.get_sillhouette_scores(latent_space_df, labels)
     evaluate_clusters.plot_distance_matrix(scores, show=show_distance_matrices, save_path=figure_path)
 
 # ### Dimensionality reduction

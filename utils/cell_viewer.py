@@ -7,6 +7,8 @@ disable_beta_transforms_warning()
 
 import imageio.v3
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 from skimage.color import label2rgb
 import math
 import segmentation.evaluate as evaluate
@@ -25,23 +27,20 @@ from torchvision import datapoints
 from torchvision.ops import masks_to_boxes
 from utils import data_utils
 import imageio
+from matplotlib.colors import LinearSegmentedColormap
 
 
-def plot_augmentations(sample):
+def plot_augmentations(sample, draw_boxes=False, show=True, save_path=None):
+    original_image = imageio.mimread(sample['file_path']) # read in the original image
 
-    # original_image, labeled_mask, augmented_image, target, name
-    original_image = imageio.mimread(sample['file_path'])
-
-    augmented_mask = torch.zeros_like(torch.Tensor(3, 1040, 1392)).type(torch.uint8)
-    augmented_mask = draw_segmentation_masks(augmented_mask, sample['masks'].type(torch.bool))
-    # augmented_mask = draw_bounding_boxes(augmented_mask, target['boxes'], width=3, colors='red')
+    # from the masks and bounding boxes, generate an RGB version of the mask
+    augmented_mask = torch.zeros(size=(3, *original_image[0].shape)).type(torch.uint8)
+    augmented_mask = draw_segmentation_masks(augmented_mask, sample['mask_3d'].type(torch.bool))
+    if draw_boxes:
+        augmented_mask = draw_bounding_boxes(augmented_mask, sample['boxes'], width=3, colors='red')
     augmented_mask = torch.permute(augmented_mask, (1, 2, 0))
 
-    # print('Original: blue: {} ... {}, red: {}, {}'.format(original_image[0].min(), original_image[0].max(), 
-    #                                                     original_image[1].min(), original_image[1].max()))
-    # print('Normalized: blue: {} ... {}, red: {}, {}'.format(augmented_image[0].min(), augmented_image[0].max(), 
-    #                                                     augmented_image[1].min(), augmented_image[1].max()))
-
+    # Plot the original image, original mask, augmented image and augmented mask
     fig, axs = plt.subplots(2, 3, figsize=(60,30), sharex=True, sharey=True)
     aspect = 'auto'
     axs[0, 0].imshow(original_image[0], aspect=aspect, cmap='Blues')
@@ -52,18 +51,23 @@ def plot_augmentations(sample):
     axs[1, 2].imshow(augmented_mask, aspect=aspect)
     fig.tight_layout()
 
-    plt.show()
+    if save_path:
+        plt.savefig(save_path)
 
-def show_dataset(dataset):
+    if show:
+        plt.show()
+
+def show_dataset(dataset, show=True, save_path=None):
     ids = np.arange(0, dataset.__len__())
     np.random.shuffle(ids)
     for idx in ids:
         sample = dataset.__getitem__(idx)
-        plot_augmentations(sample)
-        # input('Showing image {}. Press enter to continue...'.format(idx))
+        plot_augmentations(sample, show=show, save_path=save_path)
+        if not show:
+            input('Showing image {}. Pres enter to continue ...'.format(idx))
 
 # Show a single tiff with accompanying segmentations.
-def plot(tif, segmentations, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None):
+def plot(tif, segmentations, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None, save_path=None):
     num_channels = tif.shape[0]
     num_plots = num_channels + len(segmentations)
 
@@ -74,33 +78,41 @@ def plot(tif, segmentations, colormaps=None, titles=None, eval=False, ground_tru
     for i in range(num_plots):
         axs_coord = ((i+1) // ((math.ceil(num_plots/2)+1)), i % (math.ceil(num_plots/2)))
 
-        if i >= num_channels:
+        if i >= num_channels: # segmentations go here
             segmentation = segmentations[i-num_channels]
-            rgb_seg = segmentation.copy()
-            rgb_seg[rgb_seg!=0] += 40
 
             # Perform optional evaluation
             if eval and i-num_channels+1 > 0 and i != num_channels+ground_truth_index:
                 evaluate.eval(segmentations[ground_truth_index], segmentation, print_metrics=True)
-
+                
+            # Get cmap
+            cmap = mpl.cm.get_cmap('Paired', len(np.unique(segmentation)))
+            colors = cmap(np.linspace(0, 1, cmap.N))
+            np.random.shuffle(colors)
+            cmap = LinearSegmentedColormap.from_list('ShuffledCmap', colors, N=cmap.N)
+            cmap.set_under(color='black')
+            
             # Show mask
-            axs[axs_coord].imshow(rgb_seg)
+            axs[axs_coord].imshow(segmentation, cmap=cmap, vmin=0.9, interpolation='nearest')
             if titles: axs[axs_coord].set_title(title)
-        else:
+
+        else: # regular channels go here
             axs[axs_coord].imshow(tif[i], cmap=colormaps[i] if colormaps else None)
             axs[axs_coord].set_title(titles[i] if titles else None)
     
     if title: fig.suptitle(os.path.basename(title))
-    plt.tight_layout(h_pad=0)#3)
 
-    # mng = plt.get_current_fig_manager()
-    # mng.window.showMaximized()   
-    plt.show()
+    if save_path:
+        plt.savefig(save_path)
+    else:
+        plt.tight_layout(h_pad=0)#3) 
+        plt.show()
 
-def show_file(tif_path, segmentation_paths, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None):
-    tif = np.array(imageio.mimread(tif_path))
+def show_file(tif_path, segmentation_paths, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None, save_path=None):
+    tif = np.array(imageio.mimread(tif_path)[0:2])
     segmentations = [imageio.v3.imread(segmentation_path) for segmentation_path in segmentation_paths]
-    plot(tif, segmentations, eval=eval, colormaps=colormaps, titles=titles, ground_truth_index=ground_truth_index, title=title)
+    segmentations = [np.squeeze(s, 0) if len(s.shape) > 2 else s for s in segmentations]
+    plot(tif, segmentations, eval=eval, colormaps=colormaps, titles=titles, ground_truth_index=ground_truth_index, title=title, save_path=save_path)
 
 def show_files(tif_paths, segmentation_paths_2d, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None, shuffle_indices=True):
     tif_indices = list(range(len(tif_paths)))
@@ -125,20 +137,24 @@ def show_folder(tif_dir, seg_dirs=[], colormaps=None, titles=None, eval=True, gr
 
 if __name__ == "__main__":
     colormaps = ['Blues', 'hot', 'BuGn', 'Greens']
-    titles = ['DAPI', 'HSP70', 'Channel 3', 'Channel 4']
+    titles = ['DAPI', 'HSP70', 'Channel 3', 'Channel 4'] 
 
     # tif_dir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135"
     # seg_dir = ["/mnt/DATA1/anton/data/lowres_dataset_selection/annotation", 
     #         #    "/mnt/DATA1/anton/pipeline_files/results/segmentation_collection/best_yet_clusterAug/", 
     #            "/mnt/DATA1/anton/data/lowres_dataset_selection/watershed_normtest"]
     
-    tif_dir = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_tifs"
-    seg_dir = ["/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_segmentations_2_copypaste_2905"]
-    show_folder(tif_dir, seg_dir, colormaps=colormaps, titles=titles)
+    # tif_dir = "/mnt/DATA1/anton/data/lowres_dataset/images/NF135/D5"
+    # seg_dir = ['/mnt/DATA1/anton/data/lowres_dataset/annotation', '/mnt/DATA1/anton/data/lowres_dataset/watershed_test', '/mnt/DATA1/anton/data/lowres_dataset/merozoites_test']
+    # show_folder(tif_dir, seg_dir, colormaps=colormaps, titles=titles)
 
-    # tif_file = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_tifs/Experiment 2019003/tif/2019003_D3_135_hsp_20x_2_series_22_TileScan_001.tif"
-    # seg_file1 = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_segmentations_2_copypaste_2905/2019003/2019003_D3_135_hsp_20x_2_series_22_TileScan_001.png"
-    # show_file(tif_file, [seg_file1], colormaps=colormaps, titles=titles)
+    image_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif"
+    parasite_mask_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.png"
+    merozoite_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/merozoite_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
+    hepatocyte_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/hepatocyte_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
     
+    show_file(image_path, [], colormaps=colormaps, titles=titles)#, save_path='/mnt/DATA1/anton/example6.png')
+
+
 
     

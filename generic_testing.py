@@ -1,22 +1,29 @@
-from torchvision import disable_beta_transforms_warning
-disable_beta_transforms_warning()
+import os
 
-from segmentation.AI import datasets
-from utils import data_utils
+def find_deepest_folder_with_string(base_path, target_string):
+    deepest_folder = None
+    max_depth = 0
 
-import torch
-import imageio.v3
+    for root, dirs, _ in os.walk(base_path):
+        if target_string in dirs and len(root.split(os.path.sep)) > max_depth:
+            deepest_folder = root
+            max_depth = len(root.split(os.path.sep))
 
-testset_names, test_sets, X_train, y_train = [], [], [], []
+    return deepest_folder
 
-img_folder = '/mnt/DATA1/anton/data/lowres_dataset_selection/images'
-anno_folder = '/mnt/DATA1/anton/data/lowres_dataset_selection/annotation'
+# Example usage
+target_string = '/home/anton/Documents/code/hi/LiverStagePipeline/LiverStagePipelinesdfsdf'  # Replace with the path you want to search in
+# target_string = 'LiverStagePipeline'
 
-paths = data_utils.get_two_sets(img_folder, anno_folder, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
+# parts = 
 
-def collate_fn(batch):
-    return list(zip(*list(filter(lambda x : x if(x is not None) else None, batch))))
 
-mds = datasets.MicroscopyDataset(paths[0], paths[1], filter_empty=True, folder_normalize=True)
-# loader = torch.utils.data.DataLoader(mds, batch_size=4, num_workers=4,shuffle=True, collate_fn=collate_fn)
-print(mds[0])
+x = os.path.join(*(os.getcwd().split(os.path.sep)[:next((i for i in range(len(os.getcwd().split(os.path.sep)) -1, -1, -1) if 'LiverStagePipeline' in os.getcwd().split(os.path.sep)[i]), None)+1]))
+
+string_list = target_string.split(os.path.sep)
+last_index = next((i for i in range(len(string_list) - 1, -1, -1) if 'LiverStagePipeline' in string_list[i]), None)
+
+
+print(x, string_list, last_index)
+# deepest_folder = find_deepest_folder_with_string(base_path, target_string)
+# print(deepest_folder)

@@ -7,13 +7,22 @@ import torch
 import os
 from pathlib import Path
 import imageio.v2 as imageio
+from tqdm import tqdm
+from scipy.ndimage.morphology import distance_transform_edt
+from skimage.filters import gaussian
 
-def get_bbox_from_mask(mask):
+def get_bbox_from_mask(mask, padding=0):
     rows = np.any(mask, axis=1)
     cols = np.any(mask, axis=0)
     ymin, ymax = np.where(rows)[0][[0, -1]]
     xmin, xmax = np.where(cols)[0][[0, -1]]
-    return torch.tensor([xmin, ymin, xmax, ymax])
+    return torch.tensor([xmin-padding, ymin-padding, xmax+1+padding, ymax+1+padding])
+
+def get_crop(image, bbox):
+    if len(image.shape) > 2:
+        return image[:, bbox[1]:bbox[3], bbox[0]:bbox[2]]
+    else:
+        return image[bbox[1]:bbox[3], bbox[0]:bbox[2]]
 
 def multiple_bboxes_to_single_mask(bboxes, shape):
     mask = np.zeros(shape, dtype=bool)
@@ -22,6 +31,23 @@ def multiple_bboxes_to_single_mask(bboxes, shape):
     return mask
 
 def get_crops(image, bboxes, masks, channels=None):
+    # channels: a list of integers indicating which channels should be extracted. When None all are extracted.
+    
+    if channels is None:
+        channels = [c for c in range(image.shape[0])]
+
+    crops = []
+    for bbox, mask in zip(bboxes, masks):
+
+        inverse_mask_3d = (~mask).repeat(len(channels), 1, 1)
+        zerod_image = image[channels, :, :]
+        zerod_image[inverse_mask_3d] = 0
+
+        crops.append(zerod_image[:, bbox[1]:bbox[3], bbox[0]:bbox[2]])
+
+    return crops
+
+def get_better_crops(image, bboxes, masks, channels=None):
     # channels: a list of integers indicating which channels should be extracted. When None all are extracted.
     
     if channels is None:
@@ -56,19 +82,94 @@ def store_crops(crops, bboxes, path_prefix, exclude_edgecases=True, image=None):
         imageio.mimwrite(path, crop)
 
 
+# def extract_crops_from_loader(loader, folder=None, channels=None, exclude_edgecases=True):
+#     # exclude_edgecases: exclude crops that are on the edge of the image
+
+#     for batch in tqdm(loader, leave=False):
+#         for i in range(len(batch['images'])):
+#             image = batch['images'][i]
+#             bboxes = batch['boxes'][i].tolist()
+#             mask_3d = batch['masks_3d'][i]
+#             bboxes = [[int(coord) for coord in bbox] for bbox in bboxes]
+#             filepath = batch['file_paths'][i]
+
+#             # modifications to cropping
+#             better = True
+#             if better:
+#                 padding = 10
+#                 bboxes = [[box[0] - padding, box[1] - padding, box[2]+padding, box[3]+padding] for box in bboxes]
+#                 mask_3d =
+
+#                 inverse_mask_3d = ~mask_3d
+#                 dist = distance_transform_edt(inverse_mask_3d)
+#                 g = 100**(1/padding)
+#                 dist = g**-dist
+#                 # print(dist)
+
+#                 dist = dist**-0.5
+                
+#                 if channels is None:
+#                     channels = [c for c in range(image.shape[0])]
+
+#                 crops = []
+#                 for bbox, mask in zip(bboxes, masks):
+
+#                     inverse_mask_3d = (~mask).repeat(len(channels), 1, 1)
+#                     zerod_image = image[channels, :, :]
+#                     zerod_image[inverse_mask_3d] = 0
+
+#                     crops.append(zerod_image[:, bbox[1]:bbox[3], bbox[0]:bbox[2]])
+
+#                 return crops
+
+#             else:
+#                 crops = get_crops(image, bboxes, mask_3d, channels=channels)
+
+#             if folder:
+#                 path_prefix = os.path.join(folder, Path(filepath).stem)
+#                 store_crops(crops=crops, bboxes=bboxes, path_prefix=path_prefix, exclude_edgecases=exclude_edgecases, image=image)
+
 def extract_crops_from_loader(loader, folder=None, channels=None, exclude_edgecases=True):
     # exclude_edgecases: exclude crops that are on the edge of the image
 
-    for images, targets, _, filenames in loader:
-        for image, target, filename in zip(images, targets, filenames):
-            bboxes = target['boxes'].tolist()
-            masks = target['masks']
-            bboxes = [[int(coord) for coord in bbox] for bbox in bboxes]
-            crops = get_crops(image, bboxes, masks, channels=channels)
+    padding = 10
+    g = 100**(1/padding)
 
-            if folder:
-                path_prefix = os.path.join(folder, Path(filename).stem)
-                store_crops(crops=crops, bboxes=bboxes, path_prefix=path_prefix, exclude_edgecases=exclude_edgecases, image=image)
+    for batch in tqdm(loader, leave=False, desc='Extracting crops'): # loop over batches
+        for i in range(len(batch['images'])):
+            image = batch['images'][i]
+            bboxes = batch['boxes'][i].tolist()
+            mask_3d = batch['masks_3d'][i]
+            bboxes = [[int(coord) for coord in bbox] for bbox in bboxes]
+            filepath = batch['file_paths'][i]
+
+            if channels is None:
+                channels = [c for c in range(image.shape[0])]
+
+            for j in range(len(bboxes)): # loop over individual cells in one image
+                bbox = bboxes[j]
+                bbox = [bbox[0]-padding, bbox[1]-padding, bbox[2]+padding, bbox[3]+padding] # add padding to bbox
+
+                if exclude_edgecases:
+                    # Check if the bounding box lies within 2 pixels of the image border
+                    if np.any(np.array([bbox[0:2]]) < 3) or np.any((np.array([image.shape[2], image.shape[1]]) - np.array(bbox[2:])) < 3):
+                        continue
+
+                coords = bbox_to_position(bbox)
+                mask = mask_3d[j, bbox[1]:bbox[3], bbox[0]:bbox[2]]
+
+                inverse_mask = ~mask
+                dist = distance_transform_edt(inverse_mask) # mask of distance to the cell for each pixel
+                continuous_mask = g**-dist # 0 = 1, all other values are between 0 and 1. PADDING pixels away = 0.01
+                continuous_mask = gaussian(continuous_mask, sigma=1)
+
+                cropped_image = image[channels, bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                crop = cropped_image * continuous_mask
+
+                if folder: 
+                    path = '{}_{}x{}.tif'.format(os.path.join(folder, Path(filepath).stem), coords[0], coords[1])
+                    crop = [crop[c, :, :].numpy() for c in range(crop.shape[0])] # format from 3d array to list of 2d arrays
+                    imageio.mimwrite(path, crop)
 
 def extract_non_overlapping_crops_from_loader(loader, val_loader, folder=None, channels=None, exclude_edgecases=True):
     # exclude_edgecases: exclude crops that are on the edge of the image
@@ -115,7 +216,7 @@ def create_circular_mask(h, w, centre=None, radius=None):
 
 # for a grayscale image, set all pixels of a binary mask to zero.
 def subtract_mask(img, mask):
-    return np.where(mask > 0, 0, img)
+    return np.where(mask > 0, np.median(img), img)
 
 # Given a single pixel-wise mask of [H, W], generate a binary mask [n, H, W] where each n represents a different object
 def mask_2d_to_3d(mask_2d):
@@ -124,3 +225,27 @@ def mask_2d_to_3d(mask_2d):
     for i, id in enumerate(ids):
         mask_3d[i,:,:][mask_2d == id] = True
     return mask_3d
+
+# Given a boolean mask of [n, H, W] (numpy), generate an integer mask [H, W] where background = 0 and each integer represents a different object
+def mask_3d_to_2d(mask_3d, max_overlap=0.3):
+    # initialize 2d array with zeros
+    mask_2d = np.zeros(mask_3d.shape[1:], dtype=int)
+    
+    # sort 3d array by descending size # TODO check if this works
+    layer_sizes = np.sum(mask_3d, axis=(1, 2))
+    sorted_indices = np.argsort(layer_sizes)[::-1]
+    sorted_array = mask_3d[sorted_indices]
+
+    for i in range(sorted_array.shape[0]):
+        # create a mask for the current layer
+        mask = sorted_array[i, :, :]
+        
+        # compare overlap of current layer with 2d array
+        intersection = np.sum(np.logical_and(mask, mask_2d))
+        overlap = intersection / np.sum(mask)
+        
+        # if the IoU is less than the threshold, add the layer to the output array
+        if overlap <= max_overlap:
+            mask_2d[mask] = i + 1
+    
+    return mask_2d

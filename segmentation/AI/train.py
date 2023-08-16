@@ -4,14 +4,17 @@ sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[-2] + 'Liv
 
 from segmentation.AI.logger import Logger
 from segmentation.AI import visualize_log
+from utils import data_utils
 
 import torch
 from collections import OrderedDict
 
 from tqdm import tqdm
+import gc
+from transformers import MaskFormerImageProcessor
 
-def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, print_every, device, log_file=None, figure_file=None, model_path=None, 
-          early_stop=300, eval_trainloader=False, metric_for_best='aP', printed_vals=None, gradient_clipping=None):
+def train(model, train_loader, evaluator, num_epochs, optimizer, get_loss_func, log_file=None, figure_file=None, model_path=None, 
+          early_stop=300, metric_for_best='aP', scheduler=None):
     """
     Trains a PyTorch model on a training dataset and evaluates on a test dataset.
 
@@ -26,8 +29,6 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
     Returns:
         None
     """
-    model.to(device)
-    i = 0
 
     # Initialize logger
     logger = Logger(log_file, metric=metric_for_best)
@@ -38,51 +39,30 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
         model.train()
         epoch_training_loss = 0
         for batch in tqdm(train_loader, leave=False):
+            batch = data_utils.move_to_device(batch, model.device)
 
-            # Send the data to the device
-            # X = list(image.to(device) for image in batch['X'])
-            # y = [{k: v.to(device) for k, v in t.items()} for t in batch['y']]
+            optimizer.zero_grad() # zero the gradients
 
-            # Zero the gradients
-            optimizer.zero_grad()
+            loss = get_loss_func(model, batch)
+            # print(torch.cuda.memory_allocated()*1e-9)
 
-            # Forward pass
-            # output = model(X, y)
-            output = model(
-              pixel_values=batch["pixel_values"].to(device),
-              mask_labels=[labels.to(device) for labels in batch["mask_labels"]],
-              class_labels=[labels.to(device) for labels in batch["class_labels"]],
-            )
-            # loss = sum(loss for loss in output.values())
-            # epoch_training_loss += loss.item()
-
-            loss = output.loss
-            epoch_training_loss += loss
-
-            # print([(k,round(output[k].item(), 3)) for k in output.keys()])
-
-            # del images
-            # del targets
+            loss.backward() # backward pass
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping) if gradient_clipping else None
+            # print(torch.cuda.memory_allocated()*1e-9)
+            # del batch
             # torch.cuda.empty_cache()
+            # print(torch.cuda.memory_allocated()*1e-9)
 
-            # Backward pass
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping) if gradient_clipping else None
+            optimizer.step() # update the weights
 
-            # Update the weights
-            optimizer.step()
+            epoch_training_loss += loss.detach().item()
 
-        scheduler.step()
+        scheduler.step() if scheduler else None
 
         # Write info to log
         epoch_dict = OrderedDict([('epoch', str(epoch + 1)), ('train_loss', round(epoch_training_loss, 3))])
 
-        # # Compute metrics on the train and test data
-        # if eval_trainloader:
-        #     x = evaluator.eval_train(model)
-        #     epoch_dict.update(x)
-
-        test_results = evaluator.eval_test(model)
+        test_results = evaluator(model)
         epoch_dict.update(test_results)
         
         # Write epoch results to log
@@ -90,15 +70,14 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, scheduler, prin
 
         # Save model if performance is best thus far
         if (best_epoch == epoch+1) and model_path:
-            best_string = '[x]'
+            best = '[x]'
             torch.save(model.state_dict(), f=model_path)
         else:
-            best_string = '[ ]'
+            best = '[ ]'
         
         # Print statistics
-        if (epoch+1) % print_every == 0:
-            print('{} - epoch [{}/{}], train_loss: {}, '.format(best_string, epoch+1, num_epochs, round(epoch_training_loss, 3)) + 
-                  ', '.join([': '.join([k, str(epoch_dict[k])]) for k in [k for k in epoch_dict.keys() if k in printed_vals]]))
+        print('{} - epoch [{}/{}], train_loss: {}, '.format(best, epoch+1, num_epochs, round(epoch_training_loss, 3)) + 
+                ', '.join([': '.join([k, str(epoch_dict[k])]) for k in [k for k in epoch_dict.keys() if not hasattr(epoch_dict[k], 'keys')]]))
 
         # Check for early stopping criteria
         if epoch+1 - best_epoch >= early_stop > 0:
