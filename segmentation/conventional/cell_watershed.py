@@ -51,7 +51,6 @@ def segment_cells_in_image(image, eraser=None, save_path=None, channel=None, res
     image_for_mask = image.copy()
 
     # get the mask that indicates which pixels belong to cells
-    print(equalize_adapthist)
     if equalize_adapthist:
         image_for_mask = exposure.equalize_adapthist(image, kernel_size=(image.shape[0]/equalize_adapthist, image.shape[1]/equalize_adapthist), nbins=1000, clip_limit=0.005)
 
@@ -96,17 +95,17 @@ def segment_cells_in_image(image, eraser=None, save_path=None, channel=None, res
                             blob_i += 1
 
     ## For plotting
-    import matplotlib.pyplot as plt
-    imgs = {'Original': image, 'image for mask': image_for_mask, 'label image': label_image}
-    fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(50,20), sharex=True, sharey=True)
-    ax = axes.ravel()
-    for i,(k,v) in enumerate(imgs.items()):
-        ax[i].imshow(v, cmap=plt.cm.gray)
-        ax[i].set_title(k)
-    ax[-1].imshow(final_blobs, cmap=plt.cm.nipy_spectral)
-    ax[-1].set_title('Labels')
-    fig.tight_layout()
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # imgs = {'Original': image, 'image for mask': image_for_mask, 'label image': label_image}
+    # fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(50,20), sharex=True, sharey=True)
+    # ax = axes.ravel()
+    # for i,(k,v) in enumerate(imgs.items()):
+    #     ax[i].imshow(v, cmap=plt.cm.gray)
+    #     ax[i].set_title(k)
+    # ax[-1].imshow(final_blobs, cmap=plt.cm.nipy_spectral)
+    # ax[-1].set_title('Labels')
+    # fig.tight_layout()
+    # plt.show()
     # plt.savefig('/mnt/DATA1/anton/example7.png')
 
     if resize:
@@ -124,7 +123,7 @@ def call_segment_cells_in_image(args):
 
 def segment_cells_in_folder(image_folder, segmentation_folder, threads, channel, resize_shape=None, normalize=True, parasite_mask_folder=None, equalize_adapthist=None):
     if parasite_mask_folder:
-        image_paths, parasite_mask_paths = data_utils.get_two_sets(image_folder, parasite_mask_folder, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
+        image_paths, parasite_mask_paths = data_utils.get_two_sets(image_folder, parasite_mask_folder, common_subset=True, extension_dir1='.tif', extension_dir2='', return_paths=True)
         segmentation_paths = [os.path.join(segmentation_folder, data_utils.get_common_suffix(img_path, parasite_mask_path), Path(img_path).stem + '.tif') for img_path, parasite_mask_path in zip(image_paths, parasite_mask_paths)]
     else:
         image_paths = data_utils.get_paths(image_folder, extension='.tif', recursive=True)
@@ -159,7 +158,9 @@ if __name__ == "__main__":
     # mask_folder = '/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/F10_GS-HSP_watershed_test'
     # segment_cells_in_folder(image_folder=img_folder, segmentation_folder=mask_folder, threads=1, channel=0, resize_shape=None, normalize=True, equalize_adapthist=None)
 
-    ### Hepatocyte segmentation
     img_folder = '/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/F10_GS-HSP'
     parasite_mask_folder = '/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/F10_GS-HSP_watershed_test'
-    segment_cells_in_folder(image_folder=img_folder, segmentation_folder=parasite_mask_folder, threads=1, channel=0, resize_shape=None, normalize=True, equalize_adapthist=24)
+    hepatocyte_mask_folder = '/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/F10_GS-HSP_watershed_test_hepatocytes'
+    hepatocyte_channel = 1 # channel the hepatocytes occur in, when counting from 0
+
+    segment_cells_in_folder(image_folder=img_folder, segmentation_folder=hepatocyte_mask_folder, parasite_mask_folder=parasite_mask_folder, threads=40, channel=hepatocyte_channel, resize_shape=None, normalize=True, equalize_adapthist=24)

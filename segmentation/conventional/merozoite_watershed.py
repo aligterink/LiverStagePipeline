@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.sep + os.path.join(*(__file__.split(os.path.sep)[:next((i for i in range(len(__file__.split(os.path.sep)) -1, -1, -1) if 'LiverStagePipeline' in __file__.split(os.path.sep)[i]), None)+1])))
+sys.path.append(os.path.sep + os.path.join(*(os.path.abspath('').split(os.path.sep)[:next((i for i in range(len(os.path.abspath('').split(os.path.sep)) -1, -1, -1) if 'LiverStagePipeline' in os.path.abspath('').split(os.path.sep)[i]), None)+1])))
 
 from utils import data_utils, mask_utils
 
@@ -8,22 +8,15 @@ import numpy as np
 from PIL import Image
 from multiprocessing import Pool
 from tqdm import tqdm
-
 import imageio.v2 as imageio
-import cv2
 from scipy import ndimage as ndi
-from skimage import exposure
-from skimage.filters import threshold_otsu
-from skimage.measure import label, regionprops
-from skimage.morphology import closing, square, erosion, dilation, area_closing, binary_erosion
-from skimage.feature import peak_local_max
-from skimage.segmentation import watershed
+
 from pathlib import Path
-from skimage import filters, morphology, measure, segmentation
-from skimage.segmentation import flood, flood_fill
-from scipy.ndimage import binary_fill_holes
+from skimage import filters
 from skimage.morphology import extrema
 from skimage.morphology import remove_small_holes
+from skimage.filters import threshold_otsu
+from skimage.segmentation import watershed
 
 #### Methods for segmenting the merozoites within schizonts
 def _segment_merozoites_in_crop(image):
@@ -50,19 +43,19 @@ def _segment_merozoites_in_crop(image):
     mask = np.isin(labels, elements_to_keep)
     labels[~mask] = 0
 
-    ### For plotting
-    import matplotlib.pyplot as plt
-    imgs = {'Original': image, 'sharp': image_for_peaks_sharp, 
-            'Sharp binary': peak_mask, 'distance sharp': distance_peak_mask, 'markers': markers, 'eroded': labeled_markers}
-    fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(20,5), sharex=True, sharey=True)
-    ax = axes.ravel()
-    for i,(k,v) in enumerate(imgs.items()):
-        ax[i].imshow(v, cmap=plt.cm.gray)
-        ax[i].set_title(k)
-    ax[-1].imshow(labels, cmap=plt.cm.nipy_spectral)
-    ax[-1].set_title('Labels')
-    fig.tight_layout()
-    plt.show()
+    # ## For plotting
+    # import matplotlib.pyplot as plt
+    # imgs = {'Original': image, 'sharp': image_for_peaks_sharp, 
+    #         'Sharp binary': peak_mask, 'distance sharp': distance_peak_mask, 'markers': markers, 'eroded': labeled_markers}
+    # fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(20,5), sharex=True, sharey=True)
+    # ax = axes.ravel()
+    # for i,(k,v) in enumerate(imgs.items()):
+    #     ax[i].imshow(v, cmap=plt.cm.gray)
+    #     ax[i].set_title(k)
+    # ax[-1].imshow(labels, cmap=plt.cm.nipy_spectral)
+    # ax[-1].set_title('Labels')
+    # fig.tight_layout()
+    # plt.show()
     # plt.savefig('/mnt/DATA1/anton/example5.png')
     # input('waiting for input ...')
     return labels
@@ -111,13 +104,13 @@ def segment_merozoites_in_image(image, parasite_mask, channel, merozoite_mask_pa
     return merozoite_mask
 
 def call_segment_merozoites_in_image(args):
-    img_path, parasite_mask_path, channel, merozoite_mask_path, padding = args
-    segment_merozoites_in_image(img_path, parasite_mask_path, channel, merozoite_mask_path, padding)
+    img_path, parasite_mask_path, channel, merozoite_mask_path = args
+    segment_merozoites_in_image(img_path, parasite_mask_path, channel, merozoite_mask_path)
 
-def segment_merozoites_in_folder(image_folder, parasite_mask_folder, merozoite_mask_folder, threads, channel=1, padding=0):
-    image_paths, parasite_mask_paths = data_utils.get_two_sets(image_folder, parasite_mask_folder, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
+def segment_merozoites_in_folder(image_folder, parasite_mask_folder, merozoite_mask_folder, threads, channel=1):
+    image_paths, parasite_mask_paths = data_utils.get_two_sets(image_folder, parasite_mask_folder, common_subset=True, extension_dir1='.tif', extension_dir2='', return_paths=True)
     merozoite_mask_paths = [os.path.join(merozoite_mask_folder, data_utils.get_common_suffix(img_path, parasite_mask_path), Path(img_path).stem + '.tif') for img_path, parasite_mask_path in zip(image_paths, parasite_mask_paths)]
-    filewise_arguments = [(tif_path, parasite_mask_path, channel, merozoite_mask_path, padding) for tif_path, parasite_mask_path, merozoite_mask_path in zip(image_paths, parasite_mask_paths, merozoite_mask_paths)]
+    filewise_arguments = [(tif_path, parasite_mask_path, channel, merozoite_mask_path) for tif_path, parasite_mask_path, merozoite_mask_path in zip(image_paths, parasite_mask_paths, merozoite_mask_paths)]
 
     filewise_arguments = [args for args in filewise_arguments if not os.path.exists(args[3])]
     with Pool(threads) as p:
