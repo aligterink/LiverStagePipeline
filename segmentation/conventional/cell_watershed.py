@@ -417,10 +417,10 @@ def segment_cells_in_folder(image_folder, segmentation_folder, threads, channel,
     filewise_arguments = [(img_path, cells_mask_path, channel, resize_shape, file_range, parasite_mask_path, equalize_adapthist) for img_path, cells_mask_path, file_range, parasite_mask_path in zip(image_paths, segmentation_paths, file_ranges, parasite_mask_paths)]
     filewise_arguments = [args for args in filewise_arguments if not os.path.exists(args[1])]
 
-    # with Pool(threads) as p:
-    #     list(tqdm(p.imap(call_segment_cells_in_image, filewise_arguments), leave=False, desc='Segmenting cells', total=len(filewise_arguments)))
-    for args in filewise_arguments:
-        call_segment_cells_in_image(args)
+    with Pool(threads) as p:
+        list(tqdm(p.imap(call_segment_cells_in_image, filewise_arguments), leave=False, desc='Segmenting cells', total=len(filewise_arguments)))
+    # for args in filewise_arguments:
+    #     call_segment_cells_in_image(args)
 
 if __name__ == "__main__":
 
