@@ -25,25 +25,30 @@ import imageio
 from matplotlib.colors import LinearSegmentedColormap
 
 
-def plot_augmentations(sample, draw_boxes=False, show=True, save_path=None):
+def plot_augmentations(sample, draw_boxes=True, show=True, save_path=None):
     original_image = imageio.mimread(sample['file_path']) # read in the original image
 
     # from the masks and bounding boxes, generate an RGB version of the mask
-    augmented_mask = torch.zeros(size=(3, *original_image[0].shape)).type(torch.uint8)
-    augmented_mask = draw_segmentation_masks(augmented_mask, sample['mask_3d'].type(torch.bool))
+    # augmented_mask = torch.zeros(size=(3, *original_image[0].shape)).type(torch.uint8)
+    augmented_mask = torch.full((3, *original_image[0].shape), 0, dtype=torch.uint8)
+    augmented_mask = draw_segmentation_masks(augmented_mask, sample['mask_3d'].type(torch.bool), alpha=1)
     if draw_boxes:
         augmented_mask = draw_bounding_boxes(augmented_mask, sample['boxes'], width=3, colors='red')
     augmented_mask = torch.permute(augmented_mask, (1, 2, 0))
+
+    # indices = torch.arange(sample['mask_3d'].shape[0]).unsqueeze(1).unsqueeze(2)
+    # augmented_mask = torch.where(sample['mask_3d'], indices, torch.zeros(1, sample['mask_3d'].shape[1], sample['mask_3d'].shape[2]))
 
     # Plot the original image, original mask, augmented image and augmented mask
     fig, axs = plt.subplots(2, 3, figsize=(60,30), sharex=True, sharey=True)
     aspect = 'auto'
     axs[0, 0].imshow(original_image[0], aspect=aspect, cmap='Blues')
     axs[0, 1].imshow(original_image[1], aspect=aspect, cmap='hot')
-    axs[0, 2].imshow(sample['mask_2d'], aspect=aspect)
+    axs[0, 2].imshow(sample['original_mask_2d'], aspect=aspect)
     axs[1, 0].imshow(sample['image'][0], aspect=aspect, cmap='Blues')
     axs[1, 1].imshow(sample['image'][1], aspect=aspect, cmap='hot')
     axs[1, 2].imshow(augmented_mask, aspect=aspect)
+
     fig.tight_layout()
 
     if save_path:
@@ -67,8 +72,13 @@ def plot(tif, segmentations, colormaps=None, titles=None, eval=False, ground_tru
     num_plots = num_channels + len(segmentations)
     num_cols = math.ceil(num_plots/num_rows)
 
-    fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, sharex=True, sharey=True, figsize=(12*num_cols, 8*num_rows))
-        
+    # fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, sharex=True, sharey=True, figsize=(12*num_cols, 8*num_rows))
+    fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, sharex=True, sharey=True, layout='constrained', figsize=(11, 6))
+    plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9)
+
+    # fig.canvas.layout.width = '100%'
+    # fig.canvas.layout.height = '100%'
+
     for i in range(num_cols*num_rows):
         axs_coord = ((i+1) // ((math.ceil(num_plots/num_rows)+1)), i % (math.ceil(num_plots/num_rows))) if num_rows > 1 else i
 
@@ -109,7 +119,7 @@ def plot(tif, segmentations, colormaps=None, titles=None, eval=False, ground_tru
     if save_path:
         plt.savefig(save_path)
     else:
-        plt.tight_layout(h_pad=0)#3) 
+        # plt.tight_layout(h_pad=0)#3) 
         plt.show()
 
 def show_file(tif_path, segmentation_paths, colormaps=None, titles=None, eval=False, ground_truth_index=0, title=None, save_path=None, num_rows=2):
@@ -153,13 +163,19 @@ if __name__ == "__main__":
     # seg_dir = ['/mnt/DATA1/anton/data/lowres_dataset/annotation', '/mnt/DATA1/anton/data/lowres_dataset/watershed_test', '/mnt/DATA1/anton/data/lowres_dataset/merozoites_test']
     # show_folder(tif_dir, seg_dir, colormaps=colormaps, titles=titles)
 
-    image_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif"
-    parasite_mask_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.png"
-    merozoite_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/merozoite_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
-    hepatocyte_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/hepatocyte_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
+    # image_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif"
+    # parasite_mask_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.png"
+    # merozoite_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/merozoite_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
+    # hepatocyte_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/hepatocyte_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
     
-    # show_file(image_path, [parasite_mask_path, merozoite_mask_path, hepatocyte_mask_path, parasite_mask_path, hepatocyte_mask_path], colormaps=colormaps, titles=titles)#, save_path='/mnt/DATA1/anton/example6.png')
+    # show_file(image_path, [parasite_mask_path, merozoite_mask_path, hepatocyte_mask_path], colormaps=colormaps, titles=titles)#, save_path='/mnt/DATA1/anton/example6.png')
 
-    show_folder('/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/F10_GS-HSP', num_rows=2)
+    # High res testing
+    colormaps = ['hot', 'BuGn', 'Blues', 'Greens']
 
-    
+    img_folder = '/home/anton/Documents/high_res_testing/tifs'
+    parasite_mask_folder = '/home/anton/Documents/high_res_testing/parasite_segmentations'
+    hepatocyte_mask_folder = '/home/anton/Documents/high_res_testing/hepatocyte_segmentations'
+    # merozoite_mask_folder = '/home/anton/Documents/high_res_testing/merozoite_segmentations'
+    show_folder(img_folder, [parasite_mask_folder, hepatocyte_mask_folder], colormaps=colormaps)
+

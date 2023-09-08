@@ -30,10 +30,8 @@ def _segment_merozoites_in_crop(image):
     distance_peak_mask = ndi.distance_transform_edt(peak_mask)
 
     # Get peak positions by finding local maxima of the peaks mask
-
     markers = extrema.local_maxima(distance_peak_mask)
     labeled_markers, _ = ndi.label(markers, structure=np.ones(shape=(3, 3)))
-
     labels = watershed(-distance_peak_mask, labeled_markers, mask=peak_mask, compactness=2) # do watershed
 
 
@@ -43,19 +41,19 @@ def _segment_merozoites_in_crop(image):
     mask = np.isin(labels, elements_to_keep)
     labels[~mask] = 0
 
-    # ## For plotting
-    # import matplotlib.pyplot as plt
-    # imgs = {'Original': image, 'sharp': image_for_peaks_sharp, 
-    #         'Sharp binary': peak_mask, 'distance sharp': distance_peak_mask, 'markers': markers, 'eroded': labeled_markers}
-    # fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(20,5), sharex=True, sharey=True)
-    # ax = axes.ravel()
-    # for i,(k,v) in enumerate(imgs.items()):
-    #     ax[i].imshow(v, cmap=plt.cm.gray)
-    #     ax[i].set_title(k)
-    # ax[-1].imshow(labels, cmap=plt.cm.nipy_spectral)
-    # ax[-1].set_title('Labels')
-    # fig.tight_layout()
-    # plt.show()
+    ## For plotting
+    import matplotlib.pyplot as plt
+    imgs = {'Original': image, 'sharp': image_for_peaks_sharp, 
+            'Sharp binary': peak_mask, 'distance sharp': distance_peak_mask, 'markers': markers, 'eroded': labeled_markers}
+    fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(20,5), sharex=True, sharey=True)
+    ax = axes.ravel()
+    for i,(k,v) in enumerate(imgs.items()):
+        ax[i].imshow(v, cmap=plt.cm.gray)
+        ax[i].set_title(k)
+    ax[-1].imshow(labels, cmap=plt.cm.nipy_spectral)
+    ax[-1].set_title('Labels')
+    fig.tight_layout()
+    plt.show()
     # plt.savefig('/mnt/DATA1/anton/example5.png')
     # input('waiting for input ...')
     return labels

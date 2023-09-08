@@ -120,10 +120,17 @@ def find_stem_in_other_folder(folder, stem):
 def get_corresponding_paths(paths, old_dir, new_dir):
     return [os.path.join(new_dir, os.path.relpath(path, old_dir)) for path in paths]
 
-def normalize(img, old_range, new_range=(0, +1)):
+# scales an image from an old range to a new range
+def rescale(img, old_range, new_range=(0, +1)):
     img -= old_range[0]
     img = img / (old_range[1] / (new_range[1] - new_range[0]))
     img += new_range[0]
+    return img
+
+# rescale an image to a new range, but also makes the standard deviation 1
+def normalize(img, old_mean, old_SD):
+    img -= old_mean
+    img /= old_SD
     return img
 
 def count_cells(annotation_folder, substring=None, extension='.png'):
@@ -153,6 +160,22 @@ def find_folder_range(image_paths, channels):
                                            max(range_dict[folder][channel][1], np.max(imageio.mimread(path, memtest=False)[channel])))
     return range_dict
 
+def find_folder_mean_and_SD(image_paths, channels):
+    folder_paths = set([os.path.dirname(path) for path in image_paths])
+    mean_dict = {fp: {c: None for c in channels} for fp in folder_paths}
+    SD_dict = {fp: {c: None for c in channels} for fp in folder_paths}
+
+    for fp in folder_paths:
+        paths_subset = [path for path in image_paths if path.startswith(fp)]
+
+        for channel in channels:
+            images = [imageio.mimread(path, memtest=False)[channel] for path in paths_subset]
+            mean_dict[fp][channel] = np.mean(images)
+            SD_dict[fp][channel] = np.std(images)
+
+    return mean_dict, SD_dict
+
+
 def resize(img, shape):
     return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
 
@@ -169,7 +192,8 @@ def move_to_device(obj, device):
         return {key: move_to_device(value, device) for key, value in obj.items()}
     else:
         return obj
-    
+
+# Function that prepares a list of samples to be run through an AI model
 def collate_fn(batch):
     batch_dict = {}
     batch_dict.update({'images': [sample["image"] for sample in batch]})

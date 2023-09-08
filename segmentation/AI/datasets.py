@@ -28,7 +28,8 @@ class MicroscopyDataset(Dataset):
         self.filter_empty = filter_empty # if True, return None for images with empty masks
 
         self.folder_normalize = folder_normalize
-        self.folder_ranges = data_utils.find_folder_range(image_paths, channels) if folder_normalize else None
+        # self.folder_ranges = data_utils.find_folder_range(image_paths, channels) if folder_normalize else None
+        self.folder_means, self.folder_SDs = data_utils.find_folder_mean_and_SD(image_paths, channels) if folder_normalize else (None, None)
         
     def __len__(self):
         return len(self.image_paths)
@@ -55,8 +56,11 @@ class MicroscopyDataset(Dataset):
         if self.folder_normalize:
             folder = os.path.dirname(image_filepath)
             for i, channel in enumerate(self.channels):
-                old_range = self.folder_ranges[folder][channel]
-                image[i,:,:] = data_utils.normalize(image[i,:,:], old_range=old_range, new_range=(0, 1))
+                # old_range = self.folder_ranges[folder][channel]
+                # image[i,:,:] = data_utils.normalize(image[i,:,:], old_range=old_range, new_range=(0, 1))
+                folder_mean = self.folder_means[folder][channel]
+                folder_SD = self.folder_SDs[folder][channel]
+                image[i,:,:] = data_utils.normalize(image[i,:,:], folder_mean, folder_SD)
 
         # Apply transformations
         if self.individual_transform:
@@ -80,10 +84,14 @@ class MicroscopyDataset(Dataset):
             bbox_validity = torch.Tensor([verify_bbox_func(bounding_boxes[i,:].type(torch.int32)) for i in range(bounding_boxes.shape[0])])==True
             
             # Remove invalid masks, bboxes and labels
-            mask_3d = datapoints.Mask(mask_3d[bbox_validity])
-            bounding_boxes = datapoints.BoundingBox(bounding_boxes[bbox_validity], format=datapoints.BoundingBoxFormat.XYXY, spatial_size=image.shape[-2:])
+            mask_3d = mask_3d[bbox_validity]
+            bounding_boxes = bounding_boxes[bbox_validity]
             labels = labels[bbox_validity]
-            mask_2d = mask_utils.mask_3d_to_2d(mask_3d.data.cpu().numpy())
+
+            mask_3d = datapoints.Mask(mask_3d)
+            bounding_boxes = datapoints.BoundingBox(bounding_boxes, format=datapoints.BoundingBoxFormat.XYXY, spatial_size=image.shape[-2:])
+            sample.update({'original_mask_2d': mask_2d})
+            mask_2d = torch.from_numpy(mask_utils.mask_3d_to_2d(mask_3d.data.cpu().numpy()))
 
             sample.update({'mask_2d': mask_2d, 'boxes': bounding_boxes, 'labels': labels, 'mask_3d': mask_3d})
 

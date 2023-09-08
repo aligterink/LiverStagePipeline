@@ -10,6 +10,7 @@ import imageio.v2 as imageio
 from tqdm import tqdm
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.filters import gaussian
+from scipy.interpolate import interp1d
 
 def get_bbox_from_mask(mask, padding=0):
     rows = np.any(mask, axis=1)
@@ -80,6 +81,32 @@ def store_crops(crops, bboxes, path_prefix, exclude_edgecases=True, image=None):
         path = path_prefix + '_{}x{}.tif'.format(coord[0], coord[1])
         crop = [crop[c, :, :].numpy() for c in range(crop.shape[0])] # format from 3d array to list of 2d arrays
         imageio.mimwrite(path, crop)
+
+def find_minimum_value_between_two_points(coord1, coord2, array):
+    y1, x1 = coord1
+    y2, x2 = coord2
+    # Calculate the horizontal and vertical components of movement
+    dx = 1 if x2 > x1 else -1 if x2 < x1 else 0
+    dy = 1 if y2 > y1 else -1 if y2 < y1 else 0
+
+    # Calculate the number of steps in each direction
+    steps_x = abs(x2 - x1)
+    steps_y = abs(y2 - y1)
+
+    # Initialize variables to store the values and current coordinates
+    values = []
+    x, y = x1, y1
+
+    # Iterate over the maximum number of steps in either direction
+    for step in range(max(steps_x, steps_y)):
+        values.append(array[y, x])  # Collect the value at the current coordinate
+        x += dx if step < steps_x else 0  # Move horizontally if there are more steps in that direction
+        y += dy if step < steps_y else 0  # Move vertically if there are more steps in that direction
+
+    # Collect the value at the ending coordinate
+    values.append(array[y, x])
+
+    return values
 
 
 # def extract_crops_from_loader(loader, folder=None, channels=None, exclude_edgecases=True):
@@ -242,7 +269,8 @@ def mask_3d_to_2d(mask_3d, max_overlap=0.3):
         
         # compare overlap of current layer with 2d array
         intersection = np.sum(np.logical_and(mask, mask_2d))
-        overlap = intersection / np.sum(mask)
+        mask_sum = np.sum(mask)
+        overlap = intersection / mask_sum if mask_sum > 0 else 0
         
         # if the IoU is less than the threshold, add the layer to the output array
         if overlap <= max_overlap:

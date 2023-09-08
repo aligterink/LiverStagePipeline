@@ -84,28 +84,28 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size
 dummy_train_loader = torch.utils.data.DataLoader(dummy_trainset, batch_size=test_batch_size, num_workers=loader_workers, shuffle=True, collate_fn=data_utils.collate_fn)
 test_loader = torch.utils.data.DataLoader(testset, batch_size=test_batch_size, num_workers=loader_workers, shuffle=True, collate_fn=data_utils.collate_fn)
 
-# Generate new crops of training set cells
-crop_files = glob.glob(paths['segmentation_crops_folder'] + '/*.tif')
-for f in crop_files:
-    os.remove(f)
-mask_utils.extract_crops_from_loader(loader=dummy_train_loader, folder=paths['segmentation_crops_folder'])
+# # Generate new crops of training set cells
+# crop_files = glob.glob(paths['segmentation_crops_folder'] + '/*.tif')
+# for f in crop_files:
+#     os.remove(f)
+# mask_utils.extract_crops_from_loader(loader=dummy_train_loader, folder=paths['segmentation_crops_folder'])
 
 
-cell_viewer.show_dataset(trainset, show=False, save_path='/mnt/DATA1/anton/example.png')
+# cell_viewer.show_dataset(trainset, show=True)#, save_path='/mnt/DATA1/anton/example.png')
 
 
 
 
-# evaluator = evaluate.Inferenceinator(test_loader, model_output_parser, processes=eval_workers)
-# optimizer = optim.Adam(model.parameters(), lr=0.002, weight_decay=0.00005, amsgrad=True)
-# # scheduler = StepLR(optimizer, step_size=50, gamma=0.1)
+evaluator = evaluate.Inferenceinator(test_loader, model_output_parser, processes=eval_workers)
+optimizer = optim.Adam(model.parameters(), lr=0.002, weight_decay=0.00005, amsgrad=True)
+# scheduler = StepLR(optimizer, step_size=50, gamma=0.1)
 
-# train.train(model, train_loader, evaluator, num_epochs=10, optimizer=optimizer, get_loss_func=model_output_parser,
-#             log_file=log_file, figure_file=figure_file, model_path=model_file, metric_for_best='aP')
+train.train(model, train_loader, evaluator, num_epochs=10, optimizer=optimizer, get_loss_func=model_output_parser,
+            log_file=log_file, figure_file=figure_file, model_path=model_file, metric_for_best='aP')
 
-# model.load_state_dict(torch.load(model_file))
-# res = evaluator(model, store_folder=paths['segmentation_folder'])
-# print(res)
+model.load_state_dict(torch.load(model_file))
+res = evaluator(model, store_folder=paths['segmentation_folder'])
+print(res)
 
 
 
