@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 ## Settings
-folder = '/mnt/DATA1/anton/data/lowres_dataset_selection/images'
-channels = [0, 1]
+folder = '/mnt/DATA1/anton/data/dataset/images/highres'
+channels = [2, 0]
 
 
 image_paths = data_utils.get_paths(folder, extension='.tif', recursive=True, substring=None)

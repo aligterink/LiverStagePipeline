@@ -5,39 +5,33 @@ import matplotlib as mpl
 import numpy as np
 import pandas as pd
 
-def plot(embeddings_path, labels, title=None, save_path=None, show=False, marker_size=1, alpha=1, colormap='Paired'):
+def plot(embeddings_path, labels, title=None, save_path=None, show=False, marker_size=1, alpha=1, colormap='Paired', label_settings=None, gradual=False):
+    labels = [str(l) for l in labels]
     embedding = pd.read_csv(embeddings_path).to_numpy()
-    unique_labels = np.array(list(set(labels)))
+    plt.figure(figsize=(30,20))
 
-    plt.figure(figsize=(14,6))
+    if label_settings:
+        if isinstance(label_settings[0], list):
+            label_order = [l[0] for l in label_settings]
+            label_names = [l[1] for l in label_settings]
+        else:
+            label_order, label_names = label_settings
+    else:
+        label_order, label_names = list(set(labels)), list(set(labels))
 
-    try:
-        try:
-            # the couple lines below are for plotting the force of infection with gradual colors
-            ratios = [int(x.translate({ord(i): None for i in 'sh'}).split('-')[0]) / int(x.translate({ord(i): None for i in 'sh'}).split('-')[1]) for x in unique_labels]
-            ratios, unique_labels = zip(*sorted(zip(ratios, unique_labels), reverse=True))
-            ratios = np.array(ratios)
-            unique_labels = np.array(unique_labels)
-            s = np.arange(0.2, 1.2, 1/len(ratios))
-            colors = mpl.colormaps[colormap](s)
+    if gradual:
+        s = np.arange(0.2, 1.2, 1/len(label_order))
+        colors = mpl.colormaps[colormap](s)
+    else:
+        colors = mpl.colormaps[colormap]([i for i in range(len(label_order))])
 
-        except Exception as e:
-            s = (unique_labels - unique_labels.min()) / unique_labels.ptp()
-            colors = mpl.colormaps[colormap](s)
-    except:
-        colors = mpl.colormaps[colormap]([i for i in range(len(unique_labels))])
-
-    colors = mpl.colormaps[colormap]([i for i in range(len(unique_labels))])
-
-
-    # Create a scatter plot and assign colors based on labels
-    for i, label in enumerate(set(labels)):
+    # Create a scatter plot
+    for label, name, color in zip(label_order, label_names, colors):
         indices = [j for j, l in enumerate(labels) if l == label]
-        plt.scatter(np.array(embedding[:, 0])[indices], np.array(embedding[:, 1])[indices], color=colors[np.where(unique_labels==label)], label=label, s=marker_size, alpha=alpha)
+        plt.scatter(np.array(embedding[:, 0])[indices], np.array(embedding[:, 1])[indices], color=color, label=label, s=marker_size, alpha=alpha)
 
     # Add a legend with unique colors
-    legend_elements = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=8, label=label)
-                    for i, label in enumerate(unique_labels)]
+    legend_elements = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=8, label=name) for i, name in enumerate(label_names)]
     plt.legend(handles=legend_elements)
 
     # Set the axis labels

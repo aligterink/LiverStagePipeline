@@ -13,7 +13,7 @@ from tqdm import tqdm
 import gc
 from transformers import MaskFormerImageProcessor
 
-def train(model, train_loader, evaluator, num_epochs, optimizer, get_loss_func, log_file=None, figure_file=None, model_path=None, 
+def train(model, train_loader, evaluator, num_epochs, optimizer, get_loss_func, device, log_file=None, figure_file=None, model_path=None, 
           early_stop=300, metric_for_best='aP', scheduler=None):
     """
     Trains a PyTorch model on a training dataset and evaluates on a test dataset.
@@ -38,11 +38,10 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, get_loss_func, 
 
         model.train()
         epoch_training_loss = 0
-        for batch in tqdm(train_loader, leave=False):
-            batch = data_utils.move_to_device(batch, model.device)
+        for batch in tqdm(train_loader, leave=False, desc='Train loop'):
+            batch = data_utils.move_to_device(batch, device)
 
             optimizer.zero_grad() # zero the gradients
-
             loss = get_loss_func(model, batch)
             # print(torch.cuda.memory_allocated()*1e-9)
 
@@ -85,5 +84,5 @@ def train(model, train_loader, evaluator, num_epochs, optimizer, get_loss_func, 
             return
         
         # Visualize log file
-        if figure_file:
-            visualize_log.plot_metrics(log_file=log_file, save_path=figure_file)
+        # if figure_file:
+        #     visualize_log.plot_metrics(log_file=log_file, save_path=figure_file)

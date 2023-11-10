@@ -21,29 +21,44 @@ def get_sillhouette_scores(X, labels):
     for i, label_i in enumerate(tqdm(unique_labels, leave=False)):
         for j, label_j in enumerate(unique_labels):
             if i < j:
-                # mask = labels.isin([label_i, label_j]).to_numpy()
-                mask = np.array([label in [label_i, label_j] for label in labels])#.to_numpy()
+                mask = np.array([label in [label_i, label_j] for label in labels])
                 sub_labels = np.array(labels)[mask]
                 sub_X = X[mask]
-
-                # sub_labels = sub_labels[:800]
-                # sub_X = sub_X[:800, :]
 
                 score = silhouette_score(X=sub_X, labels=sub_labels, metric='euclidean')
                 scores.at[label_i, label_j] = score
                 scores.at[label_j, label_i] = score
                 unique_scores.append(score)
-                # print('did ', label_i, label_j)
     
     return mean(unique_scores), scores
 
-def plot_distance_matrix(scores, title=None, show=False, save_path=None):
-    clustermap = sns.clustermap(scores, cmap=sns.light_palette("seagreen", as_cmap=True), method='average', metric='euclidean', annot=True, figsize=(32,16))
+def plot_distance_matrix(scores, title=None, show=False, save_path=None, label_settings=None):
+    if label_settings:
+        row_cluster, col_cluster = False, False
+
+        if isinstance(label_settings[0], list):
+            label_order = [l[0] for l in label_settings if l[0] in scores.columns]
+            label_names = [l[1] for l in label_settings if l[0] in scores.columns]
+        # else:
+        #     label_order, label_names = label_settings
+
+        scores = scores.loc[label_order].T.loc[label_order].T
+        scores.index = label_names
+        scores.columns = label_names
+
+    else:
+        # label_order, label_names = list(set(labels)), list(set(labels))
+        row_cluster, col_cluster = True, True
+
+    clustermap = sns.clustermap(scores, cmap=sns.light_palette("seagreen", as_cmap=True), method='average', metric='euclidean', annot=True, 
+                                figsize=(len(scores.columns)*2, len(scores.columns)*1), row_cluster=row_cluster, col_cluster=col_cluster)
+    
     clustermap.cax.set_visible(False)
     clustermap.ax_row_dendrogram.set_visible(False)
     clustermap.ax_col_dendrogram.set_visible(False)
-
+    clustermap.ax_heatmap.set_yticklabels(clustermap.ax_heatmap.get_yticklabels(), rotation=0)
     # plt.tight_layout()
+
 
     if save_path:
         plt.savefig(save_path)

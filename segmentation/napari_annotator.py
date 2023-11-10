@@ -14,9 +14,9 @@ from pathlib import Path
 global file_index 
 
 ### Settings
-tif_dir = "/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04"
-seg_dir = "/mnt/DATA1/anton/data/unformatted/high_res_subset_from_Felix/B04_watershed/"
-starting_tif = "Exp2021025A-01-Scene-03-B4-B04_series_1_Exp2021025A-01-Scene-03-B4-B04.tif"
+tif_dir = '/mnt/DATA1/anton/data/parasite_annotated_dataset/images/highres/NF175/D7'
+seg_dir = '/mnt/DATA1/anton/data/parasite_annotated_dataset/annotation/highres/NF175/D7'
+starting_tif = None
 
 remove_all_labels_key = 't'
 remove_blob_key = 'r'
@@ -29,16 +29,16 @@ toggle_labels = 'e'
 # Indices in these lists coincide with the indices of the layers. 
 # E.g. the first layer toggle key will toggle the first layer.
 layer_minimal_contrast = [100, 200, 200, 200, 200]
-layer_maximal_contrast = [2000, 4000, 1200, 2000, 800]
+layer_maximal_contrast = [1900, 2500, 1200, 2000, 800]
 layer_toggle_keys = ['q', 'w', 'z', 'x', 'b']
-layer_names = ['blue', 'red', 'cyan', 'green', 'some other layer']
-layer_initial_visibility = [False, True, False, False, False]
-layer_colormaps = ['blue', 'red', 'cyan', 'green', 'yellow']
+layer_initial_visibility = [True, False, True, False, False]
+layer_colormaps = ['red', 'green', 'blue', 'green', 'yellow']
+layer_names = layer_colormaps
 
 
 # Initialize files
-tif_files, seg_files = data_utils.get_two_sets(tif_dir, seg_dir, common_subset=True, extension_dir1='.tif', extension_dir2='.png', return_paths=True)
-file_index = tif_files.index(os.path.join(tif_dir, starting_tif))
+tif_files, seg_files = data_utils.get_two_sets(tif_dir, seg_dir, common_subset=True, extension_dir1='.tif', extension_dir2='.tif', return_paths=True)
+file_index = tif_files.index(os.path.join(tif_dir, starting_tif)) if starting_tif else 0
 
 # create viewer
 viewer = napari.Viewer()
@@ -48,6 +48,10 @@ def change_image(viewer, forward): # makes the viewer go an image forwards or ba
 
     global file_index
     file_index += forward
+
+    file_index = min(max(file_index, 0), len(tif_files)-1)
+    print('Image {} of {}'.format(file_index+1, len(tif_files)))
+    
 
     current_tif_path = os.path.join(tif_dir, tif_files[file_index])
     current_seg_path = os.path.join(seg_dir, seg_files[file_index])
@@ -60,6 +64,7 @@ def change_image(viewer, forward): # makes the viewer go an image forwards or ba
         viewer.add_image(image[i], name=layer_names[i], blending='additive', colormap=layer_colormaps[i], visible=layer_initial_visibility[i], contrast_limits=[layer_minimal_contrast[i], layer_maximal_contrast[i]])
 
     seg_layer = viewer.open(current_seg_path, layer_type='labels')
+    seg_layer[-1].data = seg_layer[-1].data.astype(np.uint16) # set datatype to uint16 as some images contain more than 256 cells
 
 @viewer.bind_key(remove_blob_key)
 def remove_blob(viewer): # remove all pixels with the currently selected label
@@ -84,8 +89,9 @@ def save_button(viewer): # save file
     global file_index
     current_seg_path = os.path.join(seg_dir, seg_files[file_index])
     seg = viewer.layers[-1].data
-    seg_img = Image.fromarray(seg.astype(np.uint8), 'L')
-    seg_img.save(current_seg_path)
+    data_utils.save_image(seg, current_seg_path)
+    # seg_img = Image.fromarray(seg.astype(np.uint16), 'L')
+    # seg_img.save(current_seg_path)
 
     msg = 'Image saved. Nice going Annie! :)'
     viewer.status = msg

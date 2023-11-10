@@ -15,7 +15,7 @@ from torchvision.models.detection.anchor_utils import AnchorGenerator
 from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation, Mask2FormerConfig, MaskFormerConfig
 
 from utils import mask_utils
-
+from multiprocessing import Pool
 import timm  # timm is a PyTorch library that provides access to pre-trained models
 # from ultralytics import YOLO
 
@@ -26,8 +26,34 @@ from collections import OrderedDict
 import types
 import numpy as np
 
+import torch
+from multiprocessing import Pool, set_start_method
+
+torch.set_default_dtype(torch.float64)
+
+def mask_3d_to_2d(mask_3d, max_overlap=0.5):
+    mask_3d = (mask_3d.squeeze(1) > 0.5).bool()
+    
+    # Initialize 2D tensor with zeros
+    mask_2d = torch.zeros(mask_3d.size()[1:], dtype=torch.int32, device=mask_3d.device)
+    
+    for i in range(mask_3d.size(0)):
+        # Create a mask for the current layer
+        current_layer = mask_3d[i, :, :]
+        
+        # Compare overlap of the current layer with the 2D tensor
+        intersection = (current_layer & mask_2d).sum()
+        mask_sum = current_layer.sum()
+        overlap = intersection.float() / mask_sum.float() if mask_sum > 0 else torch.tensor(0.0)
+        
+        # If the IoU is less than the threshold, add the layer to the output tensor
+        if overlap <= max_overlap:
+            mask_2d[current_layer] = i + 1
+    return mask_2d
+
 ### Mask R-CNN and helper funcs
 def parse_maskrcnn(model, batch):
+
     X = batch['images']
 
     if all(k in batch for k in ['boxes', 'labels', 'masks_3d']): # when in train mode
@@ -38,11 +64,14 @@ def parse_maskrcnn(model, batch):
 
     else: # when in evaluation mode
         output = model(X)
-        pred_masks_3d = [sample['masks'].cpu().numpy().squeeze(1) > 0.5 for sample in output]
-        masks_2d = [mask_utils.mask_3d_to_2d(mask) for mask in pred_masks_3d]
-        return masks_2d
-    
-def maskrcnn(backbone, n_channels=2, pretrained_backbone=False, path=None):
+        
+        # GPU code
+        masks_3d = [sample['masks'] for sample in output]
+        batch_masks_2d = [mask_3d_to_2d(mask_3d).cpu().numpy() for mask_3d in masks_3d]
+        
+        return batch_masks_2d
+
+def maskrcnn(backbone='resnet101', n_channels=2, pretrained_backbone=False, path=None):
 
     backbone  = resnet_fpn_backbone(backbone, pretrained=pretrained_backbone, trainable_layers=5)
     model = MaskRCNN(backbone=backbone, num_classes=2, trainable_backbone_layers=5, weights=None)

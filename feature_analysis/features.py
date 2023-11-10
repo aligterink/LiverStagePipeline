@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.abspath(__file__).split('LiverStagePipeline')[0] + 'LiverStagePipeline')
+sys.path.append(os.path.sep + os.path.join(*(__file__.split(os.path.sep)[:next((i for i in range(len(__file__.split(os.path.sep)) -1, -1, -1) if 'LiverStagePipeline' in __file__.split(os.path.sep)[i]), None)+1])))
 
 
 # lowest_folder = next((root for root, dirs, files in os.walk(os.path.dirname(os.path.abspath(__file__))) if 'requirements.txt' in files), None)
@@ -15,20 +15,27 @@ from skimage import data, util, measure
 import numpy as np
 import pandas as pd  
 from pathlib import Path
-from skimage.feature import peak_local_max, canny
-from scipy import ndimage as ndi
+from segmentation.AI.datasets import MicroscopyDataset
+
+from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import math
-from skimage import filters, morphology, measure, segmentation
+from skimage import measure
 from skimage.measure import _regionprops
 from scipy import ndimage
-from scipy.ndimage import distance_transform_edt, distance_transform_cdt
 from scipy.spatial import distance
 import re
 import math
 from PIL import Image
-from skimage.segmentation import find_boundaries
 import math
+from multiprocessing import Pool
+
+# np.seterr('raise')
+
+def process_sample(args):
+    sample, feature_dict, metadata_func = args
+    results = collect_features_from_sample(sample, feature_dict, metadata_func)
+    return results
 
 Image.MAX_IMAGE_PIXELS = None # disables warning
 available_regionprops = _regionprops.PROPS.values()
@@ -37,30 +44,47 @@ available_regionprops = _regionprops.PROPS.values()
 # We use a class here so we can recycle computed channel- or image-wide features.
 class Extractor:
     def __init__(self, image, parasite_mask, name, hepatocyte_mask=None, merozoite_mask=None):
-        self.image = image
+        self.image = np.array(image)
         self.name = name
-        self.num_channels = image.shape[-1]
+        self.num_channels = image.shape[-1] if np.size(image) > 1 else None
         
-        self.parasite_mask = parasite_mask
+        self.parasite_mask = np.array(parasite_mask, dtype=np.uint32)
         self.labels = np.unique(parasite_mask)[1:].tolist()
-
-        self.hepatocyte_mask = hepatocyte_mask
-        self.hepatocyte_labels = np.unique(hepatocyte_mask)[1:].tolist()
 
         self.merozoite_mask = merozoite_mask
         
-        # Intermediate variables that are stored because they can be used to compute multiple features
-        self.max_intensities = [None] * self.num_channels
-        self.avg_intensities = [None] * self.num_channels
+        ## Intermediate variables that are stored because they can be used to compute multiple features
+        # Parasite
+        self.max_intensities = [None] * self.num_channels if np.size(image) > 1 else None
+        self.avg_intensities = [None] * self.num_channels if np.size(image) > 1 else None
         self.parasite_centre_distance_matrix = None
+        self.parasite_hepatocyte_centre_distance_matrix = None
+
+        # Hepatocyte
+        # if hepatocyte_mask:
+        self.hepatocyte_mask = np.array(hepatocyte_mask, dtype=np.uint32)
+        self.hepatocyte_labels = np.unique(hepatocyte_mask)[1:].tolist()
         self.hepatocyte_coords = None
+
+        self.hepatocyte_eccentricity = [None] * len(self.hepatocyte_labels) 
+        self.hepatocyte_area = [None] * len(self.hepatocyte_labels) 
+        self.hepatocyte_min_intensity = {c: [None] * len(self.hepatocyte_labels) for c in range(self.num_channels)}
+        self.hepatocyte_max_intensity = {c: [None] * len(self.hepatocyte_labels) for c in range(self.num_channels)}
+        self.hepatocyte_avg_intensity = {c: [None] * len(self.hepatocyte_labels) for c in range(self.num_channels)}
+
+        # template = {'parasite': [None]*len(self.labels), 'hepatocyte': [None]*len(self.hepatocyte_labels)}
+
+        # self.cell_eccentricities = template
+        # self.cell_areas = template
+        # self.cell_min_intensities = template
+        # self.cell_max_intensities = template
+        # self.cell_avg_intensities = template
 
     def get_channel(self, channel):
         if channel == None:
             return None
         elif channel == 'mask':
             return self.parasite_mask
-        
         else: 
             return self.image[:, :, channel]
 
@@ -68,6 +92,8 @@ class Extractor:
         if mask == 'merozoite':
             return self.merozoite_mask
         elif mask == 'hepatocyte':
+            if np.size(self.hepatocyte_mask) < 1:
+                sys.exit('No hepatocyte mask present, but hepatocyte features were requested')
             return self.hepatocyte_mask
         elif mask == 'parasite':
             return self.parasite_mask
@@ -101,13 +127,18 @@ class Extractor:
             return [feature_method(channel, label) for label in self.labels]
     
     def get_features(self, feature_dict):
-
-        props = pd.DataFrame(columns=['file', 'label'], data=[[self.name, label] for label in self.labels])
+        if len(self.hepatocyte_labels) < 1: # in cases where no hepatocytes were detected, we skip the image
+            return None
         
+        props = pd.DataFrame(columns=['file', 'label'], data=[[self.name, label] for label in self.labels])
+        x = sorted([c for c in feature_dict.keys() if isinstance(c, int)])
+
         for channel in feature_dict.keys():
-            channel_img = self.get_channel(channel)
             channel_name = feature_dict[channel][0]
             channel_prop_names = feature_dict[channel][1]
+            channel = x.index(channel) if isinstance(channel, int) else channel
+            channel_img = self.get_channel(channel)
+
 
             skimage_channel_prop_names = list(set(channel_prop_names).intersection(available_regionprops))
             if len(skimage_channel_prop_names) > 0:
@@ -136,6 +167,16 @@ class Extractor:
             self.parasite_centre_distance_matrix = distance.cdist(coords, coords, 'euclidean')
         return self.parasite_centre_distance_matrix
     
+    def _get_parasite_hepatocyte_centre_distance_matrix(self):
+        if self.parasite_hepatocyte_centre_distance_matrix is None:
+            parasite_coords = [self.get_centre_coords(None, label, 'parasite') for label in self.labels]
+            hepatocyte_coords = [self.get_centre_coords(None, label, 'hepatocyte') for label in self.hepatocyte_labels]
+            if len(hepatocyte_coords) > 0:
+                self.parasite_hepatocyte_centre_distance_matrix = distance.cdist(parasite_coords, hepatocyte_coords, 'euclidean') 
+            else:
+                self.parasite_hepatocyte_centre_distance_matrix = np.nan
+        return self.parasite_hepatocyte_centre_distance_matrix
+
     ###### Non-mask features
     def _get_avg_channel_intensity(self, channel):
         if not self.avg_intensities[channel]:
@@ -146,7 +187,12 @@ class Extractor:
 
     ###### Mask features
     def get_centre_coords(self, channel, label, mask_name='parasite'):
-        return ndimage.center_of_mass(self.get_mask(mask_name) == label)
+        try:
+            center = ndimage.center_of_mass(self.get_mask(mask_name) == label)
+        except:
+            x = self.get_mask(mask_name) == label
+            print(np.sum(x), label, len(self.labels), self.labels)
+        return [round(c) for c in center]
     
     def get_avg_N_neighbours_distance(self, channel, label, n):
         parasite_distances = self._get_parasite_distances(self.parasite_mask, channel, label)
@@ -157,9 +203,15 @@ class Extractor:
         return np.sum(parasite_distances <= n)
 
     # This method is overwritten by the regionprops area feature
-    def get_area(self, channel, labels, mask_name='parasite'):
-        indices = self.get_indices(self.get_mask(mask_name), labels)
-        return np.sum(indices)
+    def get_area(self, channel, label, mask_name='parasite'):
+        if mask_name == 'parasite':
+            return np.sum(self.get_indices(self.get_mask(mask_name), label))
+        elif mask_name == 'hepatocyte':
+            label_index = self.hepatocyte_labels.index(label)
+            if not self.hepatocyte_area[label_index]:
+                 self.hepatocyte_area[label_index] = np.sum(self.get_indices(self.get_mask(mask_name), label))
+            return self.hepatocyte_area[label_index]
+
 
     # For a given parasite label, get a (1,N) numpy array containing the distances to other parasites
     def _get_parasite_distances(self, channel, label):
@@ -169,23 +221,46 @@ class Extractor:
         distances_to_cell = np.delete(distances_to_cell, label_index) # remove distance of parasite to itself
         return distances_to_cell
     
+    def _get_eccentricity(self, channel, label, mask_name='parasite'):
+        if mask_name == 'parasite':
+            return measure.regionprops((self.get_mask(mask_name) == label).astype(np.uint8))[0].eccentricity
+        elif mask_name == 'hepatocyte':
+            label_index = self.hepatocyte_labels.index(label)
+            if not self.hepatocyte_eccentricity[label_index]:
+                 self.hepatocyte_eccentricity[label_index] = measure.regionprops((self.get_mask(mask_name) == label).astype(np.uint8))[0].eccentricity
+            return self.hepatocyte_eccentricity[label_index]
 
     ###### Non-mask features
-    def get_avg_intensity(self, channel, labels, mask_name='parasite'):
-        indices = self.get_indices(self.get_mask(mask_name), labels)
-        return np.mean(self.get_channel(channel)[indices])
+    def get_avg_intensity(self, channel, label, mask_name='parasite'):
+        if mask_name == 'parasite':
+            return np.mean(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+        elif mask_name == 'hepatocyte':
+            label_index = self.hepatocyte_labels.index(label)
+            if not self.hepatocyte_avg_intensity[channel][label_index]:
+                self.hepatocyte_avg_intensity[channel][label_index] = np.mean(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+            return self.hepatocyte_avg_intensity[channel][label_index]
     
     def get_std_intensity(self, channel, labels, mask_name='parasite'):
         indices = self.get_indices(self.get_mask(mask_name), labels)
         return np.std(self.get_channel(channel)[indices])
     
-    def get_max_intensity(self, channel, labels, mask_name='parasite'):
-        indices = self.get_indices(self.get_mask(mask_name), labels)
-        return np.max(self.get_channel(channel)[indices])
+    def get_max_intensity(self, channel, label, mask_name='parasite'):
+        if mask_name == 'parasite':
+            return np.max(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+        elif mask_name == 'hepatocyte':
+            label_index = self.hepatocyte_labels.index(label)
+            if not self.hepatocyte_max_intensity[channel][label_index]:
+                self.hepatocyte_max_intensity[channel][label_index] = np.max(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+            return self.hepatocyte_max_intensity[channel][label_index]
     
-    def get_min_intensity(self, channel, labels, mask_name='parasite'):
-        indices = self.get_indices(self.get_mask(mask_name), labels)
-        return np.min(self.get_channel(channel)[indices])
+    def get_min_intensity(self, channel, label, mask_name='parasite'):
+        if mask_name == 'parasite':
+            return np.min(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+        elif mask_name == 'hepatocyte':
+            label_index = self.hepatocyte_labels.index(label)
+            if not self.hepatocyte_min_intensity[channel][label_index]:
+                self.hepatocyte_min_intensity[channel][label_index] = np.min(self.get_channel(channel)[self.get_indices(self.get_mask(mask_name), label)])
+            return self.hepatocyte_min_intensity[channel][label_index]
     
     def get_intensity_sum(self, channel, labels, mask_name='parasite'):
         indices = self.get_indices(self.get_mask(mask_name), labels)
@@ -227,46 +302,73 @@ class Extractor:
         return self.hepatocyte_coords
 
     # For a parasite label, return a list containing the distances from that parasite to all hepatocytes
-    def _get_parasite_hepatocyte_distances(self, label):
-        hepatocyte_coords = self._get_hepatocyte_coords()
-        parasite_coord = self.get_centre_coords(None, label, 'parasite')
-        return [math.dist(parasite_coord, hepatocyte_coord) for hepatocyte_coord in hepatocyte_coords]
+    # def _get_parasite_hepatocyte_distances(self, label):
+    #     hepatocyte_coords = self._get_hepatocyte_coords()
+    #     parasite_coord = self.get_centre_coords(None, label, 'parasite')
+    #     return [math.dist(parasite_coord, hepatocyte_coord) for hepatocyte_coord in hepatocyte_coords]
     
     def _get_hepatocyte_labels_in_Npx_radius(self, label, radius):
-        distances = self._get_parasite_hepatocyte_distances(label)
-        return [self.hepatocyte_labels[i] for i in range(len(self.hepatocyte_labels)) if distances[i] <= radius]
+        parasite_hepatocyte_dist_matrix = self._get_parasite_hepatocyte_centre_distance_matrix()
+        if np.isnan(parasite_hepatocyte_dist_matrix).any():
+            return []
+        else:
+            distances = parasite_hepatocyte_dist_matrix[self.labels.index(label), :] 
+            return [self.hepatocyte_labels[i] for i in range(len(self.hepatocyte_labels)) if distances[i] <= radius]
+        # hepatocyte_labels = [self.hepatocyte_labels[i] for i in range(len(self.hepatocyte_labels)) if distances[i] <= radius]
+        # hepatocyte_indices = [self.hepatocyte_labels.index(l) for l in hepatocyte_labels]
+        # return hepatocyte_indices
     
     def _get_hepatocyte_N_neighbours_labels(self, label, n):
-        parasite_hepatocyte_distances = self._get_parasite_hepatocyte_distances(label)
-
-        indexed_dists = list(enumerate(parasite_hepatocyte_distances))
-        sorted_indices = sorted(indexed_dists, key=lambda x: x[1]) # sort the list based on the integer values
-        lowest_indices = [index for index, _ in sorted_indices[:n]] # get the first N indices from the sorted list
-        # print(label, [self.hepatocyte_labels[i] for i in lowest_indices])
-        return [self.hepatocyte_labels[i] for i in lowest_indices]
+        parasite_hepatocyte_dist_matrix = self._get_parasite_hepatocyte_centre_distance_matrix()
+        if np.isnan(parasite_hepatocyte_dist_matrix).any():
+            return []
+        else:
+            distances = parasite_hepatocyte_dist_matrix[self.labels.index(label), :]
+            indexed_dists = list(enumerate(distances))
+            sorted_indices = sorted(indexed_dists, key=lambda x: x[1]) # sort the list based on the integer values
+            lowest_indices = [index for index, _ in sorted_indices[:n]] # get the first N indices from the sorted list
+            return [self.hepatocyte_labels[i] for i in lowest_indices]
     
     def get_avg_N_nearest_hepatocytes_distance(self, channel, label, n):
-        parasite_to_hepatocyte_distances = self._get_parasite_hepatocyte_distances(label)
-        return np.mean(np.sort(parasite_to_hepatocyte_distances)[:n]) 
+        parasite_hepatocyte_dist_matrix = self._get_parasite_hepatocyte_centre_distance_matrix()
+        if np.isnan(parasite_hepatocyte_dist_matrix).any():
+            return []
+        else:
+            distances = parasite_hepatocyte_dist_matrix[self.labels.index(label), :]
+            return np.mean(np.sort(distances)[:n]) 
 
     def get_num_hepatocytes_in_Npx_radius(self, channel, label, radius):
         return len(self._get_hepatocyte_labels_in_Npx_radius(label, radius))
     
-    def get_avg_hepatocyte_intensity_N_px_radius(self, channel, label, radius):
+    ### Intensity
+    def get_avg_hepatocyte_intensity_Npx_radius(self, channel, label, radius):
         hepatocyte_labels = self._get_hepatocyte_labels_in_Npx_radius(label, radius)
-        return self.get_avg_intensity(channel, hepatocyte_labels, 'hepatocyte')
-
-    def get_avg_N_nearest_hepatocytes_intensity(self, channel, label, n):
-        hepatocyte_labels = self._get_hepatocyte_N_neighbours_labels(label, n)
-        return self.get_avg_intensity(channel, hepatocyte_labels, 'hepatocyte')
+        avg_intensities = [self.get_avg_intensity(channel, l, 'hepatocyte') for l in hepatocyte_labels]
+        return np.mean(avg_intensities) if avg_intensities else np.nan
     
-    def get_avg_hepatocyte_area_N_px_radius(self, channel, label, radius):
+    def get_min_hepatocyte_intensity_Npx_radius(self, channel, label, radius):
         hepatocyte_labels = self._get_hepatocyte_labels_in_Npx_radius(label, radius)
-        return self.get_area(None, hepatocyte_labels, 'hepatocyte') / len(hepatocyte_labels)
+        min_intensities = [self.get_min_intensity(channel, l, 'hepatocyte') for l in hepatocyte_labels]
+        return np.mean(min_intensities) if min_intensities else np.nan
 
-    def get_avg_N_nearest_hepatocytes_area(self, channel, label, n):
-        hepatocyte_labels = self._get_hepatocyte_N_neighbours_labels(label, n)
-        return self.get_area(None, hepatocyte_labels, 'hepatocyte') / len(hepatocyte_labels)
+    def get_max_hepatocyte_intensity_Npx_radius(self, channel, label, radius):
+        hepatocyte_labels = self._get_hepatocyte_labels_in_Npx_radius(label, radius)
+        # for l in hepatocyte_labels:
+        #     print(l, channel)
+        max_intensities = [self.get_max_intensity(channel, l, 'hepatocyte') for l in hepatocyte_labels]
+        # print(hepatocyte_labels)
+        # print(max_intensities)
+        return np.mean(max_intensities) if max_intensities else np.nan
+    
+    def get_avg_hepatocyte_area_Npx_radius(self, channel, label, radius):
+        hepatocyte_labels = self._get_hepatocyte_labels_in_Npx_radius(label, radius)
+        hepatocyte_areas = [self.get_area(None, l, 'hepatocyte') for l in hepatocyte_labels]
+        return np.mean(hepatocyte_areas) if hepatocyte_areas else np.nan
+    
+    def get_avg_hepatocyte_eccentricity_Npx_radius(self, channel, label, n):
+        hepatocyte_labels = self._get_hepatocyte_labels_in_Npx_radius(label, n)
+        eccentricities = [self._get_eccentricity(None, h, mask_name='hepatocyte') for h in hepatocyte_labels]
+        return np.mean(eccentricities) if eccentricities else np.nan
     
     # (sum intensity parasite) / ((sum intensity nearest host) + sum intensity parasite)
     # Potentially interesting, as computing this for DAPI might give an indication as to how much resources 
@@ -278,203 +380,163 @@ class Extractor:
         return sum_parasite_intensity / (sum_parasite_intensity + sum_nearest_hepatocyte_intensity)
 
 
-
-
-    ########## Merozoite features
-    def get_num_merozoites(self, channel, label):
-        cell_mask = (self.parasite_mask == label)
-        cell_merozoite_mask = self.merozoite_mask.copy()
-        cell_merozoite_mask[~cell_mask] = 0
-        merozoite_labels = np.unique(cell_merozoite_mask)
-        merozoite_labels = np.delete(merozoite_labels, np.where(merozoite_labels == 0)) # remove background label 0 from labels
-        return len(merozoite_labels)
-    
-    def get_merozoite_fullness_ratio(self, channel, label):
-        cell_mask = (self.parasite_mask == label)
-        cell_merozoite_mask = np.array(self.merozoite_mask.copy(), dtype=bool)
-        cell_merozoite_mask[~cell_mask] = 0
-        merozoite_fullness_ratio = np.sum(cell_merozoite_mask) / np.sum(cell_mask)
-        return merozoite_fullness_ratio
-    
-    def get_avg_merozoite_border_distance(self, channel, label):
-        cell_mask = (self.parasite_mask == label)
-        cell_bbox = mask_utils.get_bbox_from_mask(cell_mask, padding=1)
-        cell_mask_crop = mask_utils.get_crop(cell_mask, cell_bbox)
-        merozoite_mask_crop = np.array(mask_utils.get_crop(self.merozoite_mask, cell_bbox), dtype=bool)
-
-        merozoite_mask_crop_distance = distance_transform_edt(~merozoite_mask_crop)
-        cell_mask_crop_outline = find_boundaries(cell_mask_crop, mode='inner')
-
-        avg_distance = np.mean(merozoite_mask_crop_distance[cell_mask_crop_outline])
-
-        # import matplotlib.pyplot as plt
-        # imgs = {'cell': cell_mask_crop, 'merozoite': merozoite_mask_crop, 'merozoite_mask_crop_distance': merozoite_mask_crop_distance,
-        #         'cell_mask_crop_outline': cell_mask_crop_outline}
-        # fig, axes = plt.subplots(ncols=len(imgs.items())+1, figsize=(20,5), sharex=True, sharey=True)
-        # ax = axes.ravel()
-        # for i,(k,v) in enumerate(imgs.items()):
-        #     ax[i].imshow(v, cmap=plt.cm.gray)
-        #     ax[i].set_title(k)
-        # fig.tight_layout()
-        # # plt.show()
-        # plt.savefig('/mnt/DATA1/anton/example5.png')
-        # input('waiting for input ...')
-        return avg_distance
-
-####### Extractor calling methods
-def collect_features_from_path(image_path, feature_dict, parasite_mask_path, hepatocyte_mask_path=None, merozoite_mask_path=None, metadata_func=None):
-    image = np.array(imageio.mimread(image_path, memtest=False)).transpose(1, 2, 0)
-    parasite_mask = imageio.v3.imread(parasite_mask_path)
-    hepatocyte_mask = imageio.v3.imread(hepatocyte_mask_path)
-    merozoite_mask = imageio.v3.imread(merozoite_mask_path)
-
-    extractor = Extractor(image=image, name=Path(image_path).stem, parasite_mask=parasite_mask, hepatocyte_mask=hepatocyte_mask, merozoite_mask=merozoite_mask)
+def collect_features_from_sample(sample, feature_dict, metadata_func=None):
+    extractor = Extractor(image=np.array(sample['image']).transpose(1, 2, 0) if 'image' in sample else None, name=Path(sample['file_path']).stem, parasite_mask=sample['mask_2d'], hepatocyte_mask=sample['hepatocyte_mask'] if 'hepatocyte_mask' in sample.keys() else None)
     features = extractor.get_features(feature_dict)
 
     if metadata_func:
-        metadata = metadata_func(image_path, parasite_mask_path)
+        metadata = metadata_func(sample['file_path'])
         metadata = {k: [v]*len(features) for k,v in metadata.items()}
 
         metadata = pd.DataFrame(metadata)
         features = pd.concat([metadata, features], ignore_index=False, axis=1)
     return features
 
-def collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path=None, append=False, overwrite=False, metadata_func=None):
-    df = pd.DataFrame()
-    for tif_path, seg_path, i in zip(tif_paths, seg_paths, range(len(tif_paths))):
-        print('{} / {}'.format(i, len(tif_paths)))
-        file_props = collect_features_from_path(tif_path, seg_path, feature_dict, metadata_func)
-        df = pd.concat([df, file_props])
-
-    if csv_path:
-        isfile = Path(csv_path).is_file()
-        if (isfile and overwrite) or not isfile:
-            df.to_csv(csv_path, index=False)
-
-    print('{} features extracted from {} cells in {} images.'.format(sum([len(x[1]) for x in feature_dict.values()]), len(df.index), len(tif_paths)))
-    return df
-
-def collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_path=None, append=False, overwrite=False, metadata_func=None):
-    tif_paths, seg_paths = data_utils.get_two_sets(tif_folder, seg_folder, extension_dir1='.tif', extension_dir2='.png', common_subset=True, return_paths=True)
-    df = collect_features_from_paths(tif_paths, seg_paths, feature_dict, csv_path, append, overwrite, metadata_func)
-    return df
-
-#### Metadata functions
-def FoI_metadata(tif_path, seg_path):
+def collect_features_from_dataset(dataset, feature_dict, csv_path=None, metadata_func=None, workers=1, batch_size=96):
     
-    foi_substring = Path(tif_path).stem.split('_')[2]
-    if foi_substring.startswith('D'):
-        foi_substring = Path(tif_path).stem.split('_')[3]
+    # no multithreading, for debugging purposes
+    # for sample in tqdm(dataset, desc='Extracting features'):
+    #     file_props = collect_features_from_sample(sample, feature_dict, metadata_func)
+    #     df = pd.concat([df, file_props])
 
-    foi_substring = foi_substring.strip('h')
+    with Pool(workers) as pool:
+        for batch_start in tqdm(range(0, len(dataset), batch_size), total=math.ceil(len(dataset)/batch_size), desc='Total progression', leave=False):
+            batch_end = min(batch_start + batch_size, len(dataset))
+            df = pd.DataFrame() 
 
-    x = re.split('to|s|-', foi_substring)
-    x = list(filter(None, x))
+            batch_range = range(batch_start, batch_end)
+            results = pool.imap(process_sample, ((dataset[i], feature_dict, metadata_func) for i in batch_range))
+            # results = pool.imap(process_sample, ((sample, feature_dict, metadata_func) for sample in dataset))
 
-    # Extract the substring between the first and second '_' in the file name
-    match = re.search(r"_(.*?)_", Path(tif_path).stem)
-    if match:
-        substring = match.group(1)
+            for result in tqdm(results, total=len(batch_range), desc='Batch', leave=False):
+                
+                # Concatenate the results into the DataFrame
+                df = pd.concat([df, result]) if result is not None else df
 
-        # Detect the number using regular expressions
-        number_match = re.search(r"(nf|NF)?(175|135|54)", substring, re.IGNORECASE)
-        if number_match:
-            detected_number = int(number_match.group(2))
-        elif substring == "L1":
-            detected_number = 54
-        else:
-            print("Number not found.")
+            # Reset the index of the DataFrame
+            df.reset_index(drop=True, inplace=True)
+
+            if csv_path:
+                if Path(csv_path).is_file():
+                    old_df = pd.read_csv(csv_path)
+                    df = pd.concat([old_df, df])
+                df.to_csv(csv_path, index=False)
+
+    df = pd.read_csv(csv_path)
+    print('{} features extracted from {} cells in {} images.'.format(sum([len(x[1]) for x in feature_dict.values()]), len(df.index), len(df['file'].unique())))
+    return df
+
+def collect_features_from_folder(tif_folder, parasite_mask_folder, feature_dict, hepatocyte_mask_folder=None, csv_path=None, metadata_func=None, workers=1):
+    if csv_path and os.path.exists(csv_path):
+        completed_paths = pd.read_csv(csv_path)['file'].unique().tolist()
+        if len(completed_paths) > 0:
+            print('Features found of {} files. Skipping those.'.format(len(completed_paths)))
     else:
-        print("Substring not found.")
+        completed_paths = []
 
-    meta_data = {
-        'force_of_infection': '{}s-{}h'.format(x[0], x[1]),
-        'force_of_infection_ratio': int(x[0]) / int(x[1]),
-        # 'day': int(re.search(r"D(\d+)", tif_path).group(1)),
-        # 'strain': int(re.search(r"NF(\d+)", tif_path).group(1))
-        'strain': detected_number
-    }
-    return meta_data
-
-
-def GS_metadata(tif_path, seg_path):
-
-    file = Path(tif_path).stem
-    splits = file.split('_')
-
-    if 'D3' in file:
-        day = 3
-    elif 'D5' in file:
-        day = 5
-    elif 'D7' in file:
-        day = 7
+    tif_paths, parasite_mask_paths = data_utils.get_two_sets(tif_folder, parasite_mask_folder, extension_dir1='.tif', extension_dir2='', common_subset=True, return_paths=True, exclude=completed_paths)
+    
+    if hepatocyte_mask_folder:
+        hepatocyte_mask_paths = data_utils.get_paths(hepatocyte_mask_folder)
+        tif_paths, hepatocyte_mask_paths = data_utils.get_common_subset(tif_paths, hepatocyte_mask_paths)
+        data_utils.compare_path_lists(tif_paths, parasite_mask_paths)
     else:
-        day = 3
+        hepatocyte_mask_paths = None
 
-    if any(substring in file for substring in ['_54', '_NF54', '_nf54']):
-        strain = 54
-    elif any(substring in file for substring in ['_135', '_NF135', '_nf135']):
-        strain = 135
-    elif any(substring in file for substring in ['_175', '_NF175', '_nf175']):
-        strain = 175
+    channels = [sorted([x for x in feature_dict.keys() if isinstance(x, int)])]*len(tif_paths)
+    dataset = MicroscopyDataset(image_paths=tif_paths, channels=channels, mask_paths=parasite_mask_paths, hepatocyte_mask_paths=hepatocyte_mask_paths, folder_normalize=True)
+    df = collect_features_from_dataset(dataset, feature_dict, csv_path, metadata_func, workers=workers)
+    return df
 
-    return {'day': day, 'strain': strain}
-
-
-
-
-
-if __name__ == '__main__':
-    mask_features = [ # skimage
+def default_feature_dict(hsp_channel, dapi_channel):
+    parasite_mask_features = [
+        # Area
+        # Convex area
+        # Filled area
+        # Axis major length
+        # Axis minor length
+        # Eccentricity
+        # Equivalent diameter area
+        # Extent
+        # Maximum Feret diameter
+        # Perimeter
+        # Crofton's perimeter
+        # Solidity
         'area', 'area_convex', 'area_filled', 'axis_major_length', 'axis_minor_length', 'eccentricity', 
         'equivalent_diameter_area', 'extent', 'feret_diameter_max', 'perimeter', 'perimeter_crofton', 'solidity', 
 
-        # parasite density-based
-        'avg_(1)_neighbours_distance', 'avg_(3)_neighbours_distance', 'avg_(5)_neighbours_distance',
-        'parasites_within_(300)px', 'parasites_within_(600)px',
-
-        # hepatocyte features
-        'num_hepatocytes_in_(300)px_radius', 'avg_hepatocyte_area_(300)_px_radius', 'avg_(5)_nearest_hepatocytes_area',
-
-        # merozoite features
-        'avg_merozoite_border_distance', 'num_merozoites', 'merozoite_fullness_ratio']
+        # Average N nearest parasites distance
+        # Parasites within N pixels
+        'avg_(1)_neighbours_distance', 'avg_(3)_neighbours_distance', 'avg_(5)_neighbours_distance', 'avg_(7)_neighbours_distance',
+        'parasites_within_(100)px', 'parasites_within_(300)px', 'parasites_within_(600)px', 
+        'parasites_within_(900)px', 'parasites_within_(1200)px', 'parasites_within_(2000)px'   
+        ]
     
-    default_channel_features = ['avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
-                                'avg_(100)px_radius_intensity', 'avg_(200)px_radius_intensity', 'avg_(300)px_radius_intensity']
+    hepatocyte_mask_features = [
+        # Average N nearest hepatocytes distance
+        'avg_(1)_nearest_hepatocytes_distance', 'avg_(3)_nearest_hepatocytes_distance', 'avg_(5)_nearest_hepatocytes_distance', 
+        'avg_(7)_nearest_hepatocytes_distance', 'avg_(10)_nearest_hepatocytes_distance', 'avg_(15)_nearest_hepatocytes_distance', 
+        'avg_(20)_nearest_hepatocytes_distance', 'avg_(50)_nearest_hepatocytes_distance', 'avg_(100)_nearest_hepatocytes_distance', 
 
+        # Hepatocytes within N pixel radius
+        'num_hepatocytes_in_(100)px_radius', 'num_hepatocytes_in_(300)px_radius', 'num_hepatocytes_in_(600)px_radius', 'num_hepatocytes_in_(900)px_radius', 
+
+        # Hepatocytes within N pixel radius average area
+        'avg_hepatocyte_area_(100)px_radius', 'avg_hepatocyte_area_(300)px_radius', 'avg_hepatocyte_area_(600)px_radius', 'avg_hepatocyte_area_(900)px_radius',
+
+        # Hepatocytes within N pixel radius average eccentricity
+        'avg_hepatocyte_eccentricity_(100)px_radius', 'avg_hepatocyte_eccentricity_(300)px_radius', 'avg_hepatocyte_eccentricity_(600)px_radius', 
+        'avg_hepatocyte_eccentricity_(900)px_radius', 
+    ]
+    
+
+    dapi_channel_features = [
+        # Average intensity, intensity standard deviation, minimum intensity, maximum intensity, intensity sum
+        'avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
+
+        # N pixel radius average intensity
+        'avg_(50)px_radius_intensity', 'avg_(100)px_radius_intensity', 'avg_(300)px_radius_intensity',
+                                
+        # Hepatocytes within N pixel radius average intensity
+        'avg_hepatocyte_intensity_(100)px_radius', 'avg_hepatocyte_intensity_(300)px_radius', 'avg_hepatocyte_intensity_(600)px_radius', 'avg_hepatocyte_intensity_(900)px_radius', 
+
+        # # Hepatocytes within N pixel radius average minimum intensity
+        'min_hepatocyte_intensity_(100)px_radius', 'min_hepatocyte_intensity_(300)px_radius', 'min_hepatocyte_intensity_(600)px_radius', 'min_hepatocyte_intensity_(900)px_radius', 
+
+        # # Hepatocytes within N pixel radius average maximum intensity
+        'max_hepatocyte_intensity_(100)px_radius', 'max_hepatocyte_intensity_(300)px_radius', 'max_hepatocyte_intensity_(600)px_radius', 'max_hepatocyte_intensity_(900)px_radius']
+    
+    hsp_channel_features = [
+        # Average intensity, intensity standard deviation, minimum intensity, maximum intensity, intensity sum
+        'avg_intensity', 'std_intensity', 'min_intensity', 'max_intensity', 'intensity_sum',
+
+        # N pixel radius average intensity
+        'avg_(50)px_radius_intensity', 'avg_(100)px_radius_intensity', 'avg_(300)px_radius_intensity'
+    ]
+
+    # Cell intensity ratio
+    # feature_dict = {'mask': ('', parasite_mask_features + hepatocyte_mask_features)}
     feature_dict = {
-        'mask': ('', mask_features), 
-        0: ('dapi', default_channel_features + ['avg_hepatocyte_intensity_(300)_px_radius', 'cell_intensity_ratio']), 
-        1: ('hsp', default_channel_features)
-        # -1: ('hgs', default_channel_features)
+        'mask': ('', parasite_mask_features + hepatocyte_mask_features),
+        hsp_channel: ('hsp', hsp_channel_features),
+        dapi_channel: ('dapi', dapi_channel_features + ['cell_intensity_ratio'])
     }
 
-    # tif_folder = "/mnt/DATA1/anton/data/unformatted/GS validation data/untreated_tifs"
-    # seg_folder = "/mnt/DATA1/anton/pipeline_files/segmentation/segmentations/GS_validation_all_untreated_2_copypaste_1806"
-    # csv_file = "/mnt/DATA1/anton/pipeline_files/feature_analysis/features/untreated_GS_validation_features.csv"
+    return feature_dict
 
-    # x = collect_features_from_folder(tif_folder, seg_folder, feature_dict, csv_file, overwrite=True, metadata_func=GS_metadata)
-    # feature_dict = {
-    #     'mask': ('', ['avg_(5)_neighbours_distance']), 
-    #     0: ('dapi', []), 
-    #     1: ('hsp', [])
-    # }
 
-    image_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif"
-    parasite_mask_path = "/mnt/DATA1/anton/data/lowres_dataset_selection/annotation/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.png"
-    merozoite_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/merozoite_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
-    hepatocyte_mask_path = '/mnt/DATA1/anton/data/lowres_dataset/hepatocyte_watershed/NF135/D5/2019003_D5_135_hsp_20x_2_series_11_TileScan_001.tif'
-
-    df = collect_features_from_path(image_path=image_path, feature_dict=feature_dict, parasite_mask_path=parasite_mask_path, hepatocyte_mask_path=hepatocyte_mask_path, merozoite_mask_path=merozoite_mask_path)
-    df = df.drop('file', axis=1)
-    print(df)
-
-def get_indices(mask, labels):
-    if isinstance(labels, np.ndarray):
-        return np.isin(mask, labels)
-    else:
-        return (mask == labels)
+if __name__ == '__main__':
     
-# mask = np.array([[1, 2], [3, 4]])
-# labels = [1, 3]
-# print(get_indices(mask, labels))
+    feature_dict = default_feature_dict(hsp_channel=1, dapi_channel=0)
+
+    tif_folder = "/mnt/DATA1/anton/data/parasite_annotated_dataset/images/lowres/NF54/D7"
+    parasite_folder = "/mnt/DATA1/anton/data/parasite_annotated_dataset/annotation/lowres/NF54/D7"
+    hepatocyte_folder = '/mnt/DATA1/anton/data/basically_trash'
+    csv_file = '/mnt/DATA1/anton/pipeline_files/feature_analysis/features/hihellohi.csv'
+
+    df = collect_features_from_folder(tif_folder, parasite_folder, feature_dict, hepatocyte_folder, csv_file, overwrite=True, metadata_func=GS_metadata, workers=44)
+
+    # df = df.drop('file', axis=1)
+    print(df)
+    print(len(df.columns))
+

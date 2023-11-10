@@ -29,4 +29,8 @@ class Logger():
                 f.write(line)
 
         return self.best_epoch
+    
+    def end(self):
+        with open(self.log_file, 'a') as f:
+            f.write(('-'*200) + '\nValidation metrics\n')
         

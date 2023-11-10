@@ -13,8 +13,7 @@ class CellDataset(Dataset):
         self.non_feature_columns = non_feature_columns
         self.meta_data = df[non_feature_columns] if non_feature_columns else None
         self.features = df.loc[:, ~df.columns.isin(non_feature_columns)] if non_feature_columns else df
-
-        self.features = self.features.interpolate() # impute
+        self.features = self.features.fillna(self.features.mean())  
         self.features = (self.features-self.features.mean()) / self.features.std() # normalize
 
     def __len__(self):

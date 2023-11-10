@@ -107,14 +107,17 @@ def plot_annie_needs_in_30_min():
         
         plt.show()
 
-def multiplot(features, labels):
-    nrows = 4
-    labels = labels.tolist()
+from scipy.interpolate import make_interp_spline
+from collections import Counter
+
+
+def multiplot(features, labels, nrows=4, nbins=300):
+    labels = labels.tolist() if not isinstance(labels, list) else labels
     num_features = len(features.columns)
     unique_labels = list(set(labels))
     colors = cm.tab10(range(len(unique_labels)))
 
-    fig, axs = plt.subplots(nrows=nrows, ncols=math.ceil(num_features/nrows), figsize=(32,14))
+    fig, axs = plt.subplots(nrows=nrows, ncols=math.ceil(num_features/nrows), figsize=(50,25))
     axs = axs.flatten()
 
     for i, ax in enumerate(axs):
@@ -129,19 +132,22 @@ def multiplot(features, labels):
             for j, label in enumerate(unique_labels):
                 mask = [l == label for l in labels]
                 sub_df = features[mask][features.columns[i]]
-
-                patches.append(ax.hist(sub_df, bins=min(len(sub_df.unique()), 300), label=label, color=colors[j], density=True, histtype='step', linewidth=1.5)[2])
+                bins = min(len(sub_df.unique()), nbins, max(int(len(sub_df)/10), 10))
+                patches.append(ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=2.5)[2])
                 ax.set_title(features.columns[i])
                 ax.set_yticks([])
                 xax = ax
 
 
     handles, labels = xax.get_legend_handles_labels()
-    fig.legend(handles, labels, bbox_to_anchor=(0.965, 0.18))
-    plt.tight_layout()
+    fig.legend(handles, labels)#, bbox_to_anchor=(0.965, 0.18))
+    # plt.tight_layout()
 
     # plt.savefig('/home/anton/Documents/figures/example.png')
     plt.show()
+
+
+
 
 
 if __name__ == '__main__':

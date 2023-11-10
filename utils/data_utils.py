@@ -8,10 +8,13 @@ from sklearn.model_selection import train_test_split
 from PIL import Image
 import torch
 import cv2
+from skimage.filters import threshold_otsu
+from tqdm import tqdm
         
 # Get a list of paths from files in specified directory
 def get_paths(folder, extension='', recursive=True, substring=None):
     paths = [p for p in glob.glob(folder + '/**/*{}'.format(extension), recursive=recursive) if p.startswith('.') == False]
+    paths = [path for path in paths if not os.path.isdir(path)]
     if substring:
         rx = re.compile(substring)
         paths = [path for path in paths if rx.search(Path(path).stem)]
@@ -26,6 +29,9 @@ def get_paths(folder, extension='', recursive=True, substring=None):
 
 # Verify if two lists of paths contain identical file names
 def compare_path_lists(pathlist1, pathlist2):
+    for a,b in zip(pathlist1, pathlist2):
+        if Path(a).stem != Path(b).stem:
+            print(a, b)
     assert [Path(p).stem for p in pathlist1] == [Path(p).stem for p in pathlist2], "folders do not contain identical filenames"
 
 def get_image_array(dir, files, channel):
@@ -55,7 +61,6 @@ def get_common_subset(paths_dir1, paths_dir2):
     common_stems = list(set([Path(p).stem for p in paths_dir1]).intersection([Path(p).stem for p in paths_dir2]))
     paths_dir1 = sorted([p for p in paths_dir1 if Path(p).stem in common_stems], key=lambda x: common_stems.index(Path(x).stem))
     paths_dir2 = sorted([p for p in paths_dir2 if Path(p).stem in common_stems], key=lambda x: common_stems.index(Path(x).stem))
-    # paths_dir1, paths_dir2 = zip(*sorted(zip(paths_dir1, paths_dir2), key=lambda x: common_stems.index(Path(x[0]).stem)))
     return paths_dir1, paths_dir2
 
 
@@ -75,13 +80,13 @@ def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1
     paths_dir1 = get_paths(dir1, extension=extension_dir1, recursive=True, substring=substring)
     paths_dir2 = get_paths(dir2, extension=extension_dir2, recursive=True, substring=substring)
 
-    if common_subset:
-        paths_dir1, paths_dir2 = get_common_subset(paths_dir1, paths_dir2)
-
     if exclude:
         exclusion_stems = [Path(p).stem for p in exclude]
         paths_dir1 = [p for p in paths_dir1 if Path(p).stem not in exclusion_stems]
         paths_dir2 = [p for p in paths_dir2 if Path(p).stem not in exclusion_stems]
+
+    if common_subset:
+        paths_dir1, paths_dir2 = get_common_subset(paths_dir1, paths_dir2)
 
     compare_path_lists(paths_dir1, paths_dir2)
 
@@ -142,46 +147,74 @@ def count_cells(annotation_folder, substring=None, extension='.png'):
     print('{} cells in {} images for {}'.format(cells, imgs, annotation_folder))
     return imgs, cells
 
-def recursively_count_cells(folder):
-    count_cells(folder)
+def recursively_count_cells(folder, extension='.png'):
+    count_cells(folder, extension=extension)
     subfolders = [ f.path for f in os.scandir(folder) if f.is_dir() ]
     for subfolder in subfolders:
-        recursively_count_cells(subfolder)
+        recursively_count_cells(subfolder, extension=extension)
 
-# 
-def find_folder_range(image_paths, channels):
+# for a list of images, and for each channel within those images, find the range (min and max) of intensity values
+def find_folder_range(image_paths, channels, otsu=False):
     folder_paths = set([os.path.dirname(path) for path in image_paths])
-    range_dict = {fp: {c: (999999999, 0) for c in channels} for fp in folder_paths}
+    range_dict = {fp: {} for fp in folder_paths}
 
-    for path in image_paths:
+    hist_dict = {fp: {str(channel): np.zeros(shape=(20000)) for channel in channels[0]} for fp in folder_paths} if otsu else None
+
+    for i, path in enumerate(tqdm(image_paths, desc='Finding folder ranges', leave=False)):
         folder = os.path.dirname(path)
-        for channel in channels:
-            range_dict[folder][channel] = (min(range_dict[folder][channel][0], np.min(imageio.mimread(path, memtest=False)[channel])), 
-                                           max(range_dict[folder][channel][1], np.max(imageio.mimread(path, memtest=False)[channel])))
-    return range_dict
+        # for channel in channels:
+        #     range_dict[folder][channel] = (min(range_dict[folder][channel][0], np.min(imageio.mimread(path, memtest=False)[channel])), 
+        #                                    max(range_dict[folder][channel][1], np.max(imageio.mimread(path, memtest=False)[channel])))
+        image = imageio.mimread(path, memtest=False)
+        for channel in channels[i]:
+            if str(channel) not in range_dict[folder].keys():
+                range_dict[folder][str(channel)] = [[], []]
+            range_dict[folder][str(channel)][0].append(np.min(image[channel]))
+            range_dict[folder][str(channel)][1].append(np.max(image[channel]))
+
+            if otsu:
+                hist, _ = np.histogram(image, bins=20000, range=(0, 20000))
+                hist_dict[folder][str(channel)] += hist
+
+    for fp in range_dict:
+        for channel in range_dict[fp]:
+            range_dict[fp][str(channel)][0] = min(range_dict[fp][str(channel)][0])
+            range_dict[fp][str(channel)][1] = max(range_dict[fp][str(channel)][1])
+
+    if otsu:
+        for fp in hist_dict:
+            for channel in hist_dict[fp]:
+                hist_dict[fp][str(channel)] = threshold_otsu(hist=hist_dict[fp][str(channel)], nbins=20000)
+        return range_dict, [hist_dict[os.path.dirname(path)][str(channels[0][0])] for path in image_paths]
+    else:
+        return range_dict
 
 def find_folder_mean_and_SD(image_paths, channels):
     folder_paths = set([os.path.dirname(path) for path in image_paths])
-    mean_dict = {fp: {c: None for c in channels} for fp in folder_paths}
-    SD_dict = {fp: {c: None for c in channels} for fp in folder_paths}
+    mean_dict = {fp: {c: None for c in range(len(channels[0]))} for fp in folder_paths}
+    SD_dict = {fp: {c: None for c in range(len(channels[0]))} for fp in folder_paths}
 
     for fp in folder_paths:
         paths_subset = [path for path in image_paths if path.startswith(fp)]
 
-        for channel in channels:
-            images = [imageio.mimread(path, memtest=False)[channel] for path in paths_subset]
-            mean_dict[fp][channel] = np.mean(images)
-            SD_dict[fp][channel] = np.std(images)
+        for i in range(len(channels[0])):
+            images = []
+            for j, path in enumerate(paths_subset):
+                images.append(imageio.mimread(path)[channels[j][i]])
+        
+            mean_dict[fp][i] = np.mean(images)
+            SD_dict[fp][i] = np.std(images)
 
     return mean_dict, SD_dict
 
 
 def resize(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(img, dsize=shape[::-1], interpolation=cv2.INTER_LINEAR)
 
 # Rescale appropriate for masks since it uses INTER_NEAREST as interpolation method
 def resize_mask(img, shape):
-    return cv2.resize(img, dsize=shape, interpolation=cv2.INTER_NEAREST)
+    return cv2.resize(img, dsize=shape[::-1], interpolation=cv2.INTER_NEAREST)
+ 
 
 def move_to_device(obj, device):
     if isinstance(obj, torch.Tensor):
@@ -197,11 +230,12 @@ def move_to_device(obj, device):
 def collate_fn(batch):
     batch_dict = {}
     batch_dict.update({'images': [sample["image"] for sample in batch]})
-    batch_dict.update({'masks_2d': [sample["mask_2d"] for sample in batch]})
-    batch_dict.update({'labels': [sample["labels"] for sample in batch]})
-    batch_dict.update({'boxes': [sample['boxes'] for sample in batch]})
-    batch_dict.update({'masks_3d': [sample["mask_3d"] for sample in batch]})
+    batch_dict.update({'masks_2d': [sample["mask_2d"] for sample in batch]}) if 'mask_2d' in batch[0].keys() else None
+    batch_dict.update({'labels': [sample["labels"] for sample in batch]}) if 'labels' in batch[0].keys() else None
+    batch_dict.update({'boxes': [sample['boxes'] for sample in batch]}) if 'boxes' in batch[0].keys() else None
+    batch_dict.update({'masks_3d': [sample["mask_3d"] for sample in batch]}) if 'mask_3d' in batch[0].keys() else None
     batch_dict.update({'file_paths': [sample['file_path'] for sample in batch]})
+    batch_dict.update({'original_sizes': [sample["original_size"] for sample in batch]})
     batch_dict.update({'groups': [sample['group'] for sample in batch]}) if 'group' in batch[0].keys() else None
     return batch_dict
 
@@ -217,7 +251,10 @@ def parse_image(path, channels=None, numpy_dtype=None, torch_dtype=None):
     elif torch_dtype:
         image = torch.Tensor(image, dtype=torch_dtype)
     if image.shape[0] == 1:
-        image = image[0, :, :]
+        try:
+            image = image[0, :, :]
+        except:
+            print(path, image.shape)
     return image
 
 def save_image(image, path):
@@ -259,6 +296,20 @@ def get_common_suffix(path1, path2):
     
     return common_suffix
 
+def find_common_substring(strings):
+    if not strings:
+        return ""
+    
+    min_len = min(len(s) for s in strings)
+    
+    common_substring = ""
+    for i in range(min_len):
+        if all(s[i] == strings[0][i] for s in strings):
+            common_substring += strings[0][i]
+        else:
+            break
+    return common_substring
+
 
 if __name__ == "__main__":
     tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"
@@ -273,4 +324,4 @@ if __name__ == "__main__":
     # train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
     # # print(next(iter(train_loader))[0].shape)
     # train_loader.__getitem__(2)
-    recursively_count_cells(folder='/mnt/DATA1/anton/data/lowres_dataset_selection/annotation')
+    recursively_count_cells(folder='/mnt/DATA1/anton/data/parasite_annotated_dataset/annotation/highres', extension='')
