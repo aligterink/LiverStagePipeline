@@ -24,7 +24,8 @@ def setup(pipeline_files_folder, session_name):
     })
     paths.update({
         'FA_latent_space_plots_folder': os.path.join(paths['FA_figures_folder'], 'latent_space_plots'),
-        'FA_latent_space_matrices_folder': os.path.join(paths['FA_figures_folder'], 'latent_space_matrices')
+        'FA_latent_space_matrices_folder': os.path.join(paths['FA_figures_folder'], 'latent_space_matrices'),
+        'FA_features_multiplot_folder': os.path.join(paths['FA_figures_folder'], 'multiplots')
     })
     
     for folder in paths.values():
@@ -35,7 +36,7 @@ def setup(pipeline_files_folder, session_name):
         'model_file': os.path.join(paths['segmentation_models_folder'], session_name + '.pth'),
         'figure_file': os.path.join(paths['segmentation_figures_folder'], session_name + '.png'),
         'feature_file': os.path.join(paths['FA_features_folder'], session_name + '.csv'),
-
+        'features_completed_file': os.path.join(paths['FA_features_folder'], session_name + '_completed_files.csv')
     })
     
     return paths

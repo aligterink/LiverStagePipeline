@@ -35,7 +35,7 @@ from multiprocessing import Pool
 def process_sample(args):
     sample, feature_dict, metadata_func = args
     results = collect_features_from_sample(sample, feature_dict, metadata_func)
-    return results
+    return (sample['file_path'], results)
 
 Image.MAX_IMAGE_PIXELS = None # disables warning
 available_regionprops = _regionprops.PROPS.values()
@@ -104,7 +104,17 @@ class Extractor:
         if isinstance(labels, int):
             return (mask == labels)
         else:
-            return np.isin(mask, labels)
+            try:
+                return np.isin(mask, labels)
+            except Exception as e:
+                print(e)
+                print(type(mask), type(labels))
+                print(len(np.unique(self.hepatocyte_mask)))
+                print(mask.shape)
+                print(labels)
+                print(np.unique(mask))
+                print(np.unique(self.hepatocyte_mask))
+                raise SystemExit
 
 
     # Method for calling our own features
@@ -383,8 +393,7 @@ class Extractor:
 def collect_features_from_sample(sample, feature_dict, metadata_func=None):
     extractor = Extractor(image=np.array(sample['image']).transpose(1, 2, 0) if 'image' in sample else None, name=Path(sample['file_path']).stem, parasite_mask=sample['mask_2d'], hepatocyte_mask=sample['hepatocyte_mask'] if 'hepatocyte_mask' in sample.keys() else None)
     features = extractor.get_features(feature_dict)
-
-    if metadata_func:
+    if metadata_func and isinstance(features, pd.DataFrame):
         metadata = metadata_func(sample['file_path'])
         metadata = {k: [v]*len(features) for k,v in metadata.items()}
 
@@ -392,7 +401,7 @@ def collect_features_from_sample(sample, feature_dict, metadata_func=None):
         features = pd.concat([metadata, features], ignore_index=False, axis=1)
     return features
 
-def collect_features_from_dataset(dataset, feature_dict, csv_path=None, metadata_func=None, workers=1, batch_size=96):
+def collect_features_from_dataset(dataset, feature_dict, csv_path=None, completed_files_path=None, metadata_func=None, workers=1, batch_size=96):
     
     # no multithreading, for debugging purposes
     # for sample in tqdm(dataset, desc='Extracting features'):
@@ -406,12 +415,11 @@ def collect_features_from_dataset(dataset, feature_dict, csv_path=None, metadata
 
             batch_range = range(batch_start, batch_end)
             results = pool.imap(process_sample, ((dataset[i], feature_dict, metadata_func) for i in batch_range))
-            # results = pool.imap(process_sample, ((sample, feature_dict, metadata_func) for sample in dataset))
-
+            files_completed = []
             for result in tqdm(results, total=len(batch_range), desc='Batch', leave=False):
-                
                 # Concatenate the results into the DataFrame
-                df = pd.concat([df, result]) if result is not None else df
+                df = pd.concat([df, result[1]]) if result[1] is not None else df
+                files_completed.append(result[0])
 
             # Reset the index of the DataFrame
             df.reset_index(drop=True, inplace=True)
@@ -420,32 +428,41 @@ def collect_features_from_dataset(dataset, feature_dict, csv_path=None, metadata
                 if Path(csv_path).is_file():
                     old_df = pd.read_csv(csv_path)
                     df = pd.concat([old_df, df])
+
                 df.to_csv(csv_path, index=False)
+            if completed_files_path:
+                with open(completed_files_path, 'a') as f:
+                    f.write('\n'.join(files_completed) + '\n')
 
     df = pd.read_csv(csv_path)
     print('{} features extracted from {} cells in {} images.'.format(sum([len(x[1]) for x in feature_dict.values()]), len(df.index), len(df['file'].unique())))
     return df
 
-def collect_features_from_folder(tif_folder, parasite_mask_folder, feature_dict, hepatocyte_mask_folder=None, csv_path=None, metadata_func=None, workers=1):
-    if csv_path and os.path.exists(csv_path):
-        completed_paths = pd.read_csv(csv_path)['file'].unique().tolist()
+def collect_features_from_folder(tif_folder, parasite_mask_folder, feature_dict, hepatocyte_mask_folder=None, csv_path=None, completed_files_path=None, metadata_func=None, workers=1, normalization_folder_level=None):
+    if completed_files_path and os.path.exists(completed_files_path):
+        with open(completed_files_path, 'r') as file:
+            completed_paths = [line.strip() for line in file]
+        
         if len(completed_paths) > 0:
-            print('Features found of {} files. Skipping those.'.format(len(completed_paths)))
+            print('{} files already processed. Skipping those.'.format(len(completed_paths)))
     else:
         completed_paths = []
 
     tif_paths, parasite_mask_paths = data_utils.get_two_sets(tif_folder, parasite_mask_folder, extension_dir1='.tif', extension_dir2='', common_subset=True, return_paths=True, exclude=completed_paths)
-    
     if hepatocyte_mask_folder:
         hepatocyte_mask_paths = data_utils.get_paths(hepatocyte_mask_folder)
         tif_paths, hepatocyte_mask_paths = data_utils.get_common_subset(tif_paths, hepatocyte_mask_paths)
+        print(len(tif_paths), len(parasite_mask_paths))
         data_utils.compare_path_lists(tif_paths, parasite_mask_paths)
     else:
         hepatocyte_mask_paths = None
 
     channels = [sorted([x for x in feature_dict.keys() if isinstance(x, int)])]*len(tif_paths)
-    dataset = MicroscopyDataset(image_paths=tif_paths, channels=channels, mask_paths=parasite_mask_paths, hepatocyte_mask_paths=hepatocyte_mask_paths, folder_normalize=True)
-    df = collect_features_from_dataset(dataset, feature_dict, csv_path, metadata_func, workers=workers)
+    unique_normalization_levels = np.unique([p.split('/')[normalization_folder_level] for p in tif_paths]).tolist()
+    normalization_mask = [unique_normalization_levels.index(p.split('/')[normalization_folder_level]) for p in tif_paths]
+
+    dataset = MicroscopyDataset(image_paths=tif_paths, channels=channels, mask_paths=parasite_mask_paths, hepatocyte_mask_paths=hepatocyte_mask_paths, normalize='z-score', normalization_mask=normalization_mask)
+    df = collect_features_from_dataset(dataset, feature_dict=feature_dict, csv_path=csv_path, completed_files_path=completed_files_path, metadata_func=metadata_func, workers=workers)
     return df
 
 def default_feature_dict(hsp_channel, dapi_channel):

@@ -5,17 +5,17 @@ import matplotlib as mpl
 import numpy as np
 import pandas as pd
 
-def plot(embeddings_path, labels, title=None, save_path=None, show=False, marker_size=1, alpha=1, colormap='Paired', label_settings=None, gradual=False):
+def plot(embeddings_path, labels, title=None, save_path=None, show=False, marker_size=1, alpha=1, colormap='Paired', label_settings=None, gradual=False, figsize=(30,20)):
     labels = [str(l) for l in labels]
     embedding = pd.read_csv(embeddings_path).to_numpy()
-    plt.figure(figsize=(30,20))
+    plt.figure(figsize=figsize)
 
     if label_settings:
         if isinstance(label_settings[0], list):
-            label_order = [l[0] for l in label_settings]
-            label_names = [l[1] for l in label_settings]
+            label_order = [l[0] for l in label_settings if l[0] in labels]
+            label_names = [l[1] for l in label_settings if l[0] in labels]
         else:
-            label_order, label_names = label_settings
+            label_order, label_names = label_settings, label_settings
     else:
         label_order, label_names = list(set(labels)), list(set(labels))
 

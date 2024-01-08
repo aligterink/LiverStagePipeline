@@ -32,7 +32,7 @@ def get_sillhouette_scores(X, labels):
     
     return mean(unique_scores), scores
 
-def plot_distance_matrix(scores, title=None, show=False, save_path=None, label_settings=None):
+def plot_distance_matrix(scores, title=None, show=False, save_path=None, label_settings=None, figsize=None):
     if label_settings:
         row_cluster, col_cluster = False, False
 
@@ -51,13 +51,13 @@ def plot_distance_matrix(scores, title=None, show=False, save_path=None, label_s
         row_cluster, col_cluster = True, True
 
     clustermap = sns.clustermap(scores, cmap=sns.light_palette("seagreen", as_cmap=True), method='average', metric='euclidean', annot=True, 
-                                figsize=(len(scores.columns)*2, len(scores.columns)*1), row_cluster=row_cluster, col_cluster=col_cluster)
+                                figsize=figsize if figsize else (len(scores.columns)*2, len(scores.columns)*1), row_cluster=row_cluster, col_cluster=col_cluster)
     
     clustermap.cax.set_visible(False)
     clustermap.ax_row_dendrogram.set_visible(False)
     clustermap.ax_col_dendrogram.set_visible(False)
     clustermap.ax_heatmap.set_yticklabels(clustermap.ax_heatmap.get_yticklabels(), rotation=0)
-    # plt.tight_layout()
+    plt.tight_layout()
 
 
     if save_path:

@@ -15,8 +15,12 @@ from torch.utils.data import Dataset
 from torchvision import datapoints
 from torchvision.ops import masks_to_boxes
 
+from tqdm.auto import tqdm
+
 class MicroscopyDataset(Dataset):
-    def __init__(self, image_paths, channels, mask_paths=None, hepatocyte_mask_paths=None, groups=None, transform=None, individual_transform=None, filter_empty=False, folder_normalize=True, rescale_img=None, rescale_mask=None):
+    def __init__(self, image_paths, channels, mask_paths=None, hepatocyte_mask_paths=None, groups=None, transform=None, 
+                 individual_transform=None, filter_empty=False, normalize='min-max', rescale_img=None, rescale_mask=None,
+                 normalization_mask=None):
         # set_folder_max: we are using data with a multitude of intensity ranges caused by different microscopes and settings. When set to True, this parameter finds the highest pixel intensity in the folder of each respective image, which can be used for normalization purposes. Note that this normalization relies on the assumption that folders do not contain mixtures of different microscopes or microscope settings.
 
         self.image_paths = image_paths
@@ -28,12 +32,19 @@ class MicroscopyDataset(Dataset):
         self.individual_transform = individual_transform
         self.filter_empty = filter_empty # if True, return None for images with empty masks
 
-        self.folder_normalize = folder_normalize
-        # self.folder_means, self.folder_SDs = data_utils.find_folder_mean_and_SD(image_paths, channels) if folder_normalize else (None, None)
-        # print(self.folder_means, self.folder_SDs)
+        self.folder_normalize = normalize
+        self.normalization_mask = normalization_mask
 
-        self.folder_ranges = data_utils.find_folder_range(image_paths, channels) if folder_normalize else None
-        # print(self.folder_ranges)
+        if normalize == 'min-max':
+            self.folder_ranges = data_utils.find_folder_range(image_paths, channels) if normalize else None
+        
+        elif normalize == 'z-score':
+            self.norm_means, self.norm_SDs = {}, {}
+            for i, m in enumerate(tqdm(np.unique(normalization_mask), leave=False)):
+                paths = [p for p, id in zip(image_paths, normalization_mask) if id == m]
+                means, SDs = data_utils.find_mean_and_SD(paths, channels)
+                self.norm_means[i] = means
+                self.norm_SDs[i] = SDs
 
         self.rescale_img = rescale_img
         self.rescale_mask = rescale_mask
@@ -49,7 +60,7 @@ class MicroscopyDataset(Dataset):
 
         if sample_channels:
             image = np.array(list(map(imageio.mimread(image_filepath, memtest=False).__getitem__, sample_channels))).astype(np.float64)
-            sample.update({'original_image': image, 'original_size': image.shape[1:]})
+            sample.update({'original_image': image.copy(), 'original_size': image.shape[1:]})
             image = torch.Tensor(image)
 
         # Check for rescaling and verify image is not already the correct shape
@@ -71,15 +82,20 @@ class MicroscopyDataset(Dataset):
             labels = torch.ones_like(object_ids, dtype=torch.int64)
             bounding_boxes = datapoints.BoundingBox(masks_to_boxes(mask_3d), format=datapoints.BoundingBoxFormat.XYXY, spatial_size=mask_2d.shape)
 
-        # Normalize folders
-        if self.folder_normalize and sample_channels:
-            folder = os.path.dirname(image_filepath)
-            for i, channel in enumerate(sample_channels):
-                old_range = self.folder_ranges[folder][str(channel)]
-                image[i,:,:] = data_utils.rescale(image[i,:,:], old_range=old_range, new_range=(0, 1))
-                # folder_mean = self.folder_means[folder][i]
-                # folder_SD = self.folder_SDs[folder][i]
-                # image[i,:,:] = data_utils.normalize(image[i,:,:], folder_mean, folder_SD)
+        # Normalize
+        if sample_channels:
+            if self.folder_normalize == 'min-max':
+                folder = os.path.dirname(image_filepath)
+                for i, channel in enumerate(sample_channels):
+                    old_range = self.folder_ranges[folder][str(channel)]
+                    image[i,:,:] = data_utils.rescale(image[i,:,:], old_range=old_range, new_range=(0, 1))
+                    # folder_mean = self.folder_means[folder][i]
+                    # folder_SD = self.folder_SDs[folder][i]
+                    # image[i,:,:] = data_utils.normalize(image[i,:,:], folder_mean, folder_SD)
+            
+            elif self.folder_normalize == 'z-score':
+                for i, channel in enumerate(sample_channels):
+                    image[i,:,:] = (image[i,:,:] - self.norm_means[self.normalization_mask[idx]][i]) / self.norm_SDs[self.normalization_mask[idx]][i]
 
         # Apply transformations
         if self.individual_transform:

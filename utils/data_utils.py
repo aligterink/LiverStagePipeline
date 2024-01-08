@@ -9,7 +9,7 @@ from PIL import Image
 import torch
 import cv2
 from skimage.filters import threshold_otsu
-from tqdm import tqdm
+from tqdm.auto import tqdm
         
 # Get a list of paths from files in specified directory
 def get_paths(folder, extension='', recursive=True, substring=None):
@@ -74,8 +74,8 @@ def intersection_of_lists(tuples_of_lists):
 
 
 # From two folders, return files with corresponding stems
-def get_two_sets(dir1, dir2, common_subset=False, substring=None, extension_dir1='', extension_dir2='', 
-                 array=False, channel_dir1=None, channel_dir2=None, split=None, exclude=None, return_paths=False, max_imgs=None):
+def get_two_sets(dir1, dir2, common_subset=True, substring=None, extension_dir1='', extension_dir2='', 
+                 array=False, channel_dir1=None, channel_dir2=None, split=None, exclude=None, return_paths=True, max_imgs=None):
     
     paths_dir1 = get_paths(dir1, extension=extension_dir1, recursive=True, substring=substring)
     paths_dir2 = get_paths(dir2, extension=extension_dir2, recursive=True, substring=substring)
@@ -189,23 +189,27 @@ def find_folder_range(image_paths, channels, otsu=False):
     else:
         return range_dict
 
-def find_folder_mean_and_SD(image_paths, channels):
-    folder_paths = set([os.path.dirname(path) for path in image_paths])
-    mean_dict = {fp: {c: None for c in range(len(channels[0]))} for fp in folder_paths}
-    SD_dict = {fp: {c: None for c in range(len(channels[0]))} for fp in folder_paths}
+def find_mean_and_SD(image_paths, channels):
+    num_channels = len(channels[0])
+    means = [[] for c in range(num_channels)]
+    SDs = [[] for c in range(num_channels)]
 
-    for fp in folder_paths:
-        paths_subset = [path for path in image_paths if path.startswith(fp)]
+    for i, p in enumerate(tqdm(image_paths, leave=False, desc='Computing image means')):
+        img = imageio.mimread(p)
+        for j, c in enumerate(channels[i]):
+            means[j].append(np.mean(img[c]))
+            # print(np.min(img[c]), np.max(img[c]), np.mean(img[c]), np.sqrt(np.mean((img[c] - np.mean(img[c])) ** 2)))
 
-        for i in range(len(channels[0])):
-            images = []
-            for j, path in enumerate(paths_subset):
-                images.append(imageio.mimread(path)[channels[j][i]])
-        
-            mean_dict[fp][i] = np.mean(images)
-            SD_dict[fp][i] = np.std(images)
+    channel_means = [np.mean(x) for x in means]
 
-    return mean_dict, SD_dict
+    for i, p in enumerate(tqdm(image_paths, leave=False, desc='Computing image SDs')):
+        img = imageio.mimread(p)
+        for j, c in enumerate(channels[i]):
+            SDs[j].append(np.sqrt(np.mean((img[c] - channel_means[j]) ** 2)))
+
+    channel_SDs = [np.mean(x) for x in SDs]
+
+    return channel_means, channel_SDs
 
 
 def resize(img, shape):
@@ -312,16 +316,4 @@ def find_common_substring(strings):
 
 
 if __name__ == "__main__":
-    tifdir = "/mnt/DATA1/anton/data/lowres_dataset_selection/images/NF135/"
-    segdir = "/mnt/DATA2/anton/3564_low_res_imgs/tiffs_watersheds"
-    # # x1, x2 = get_two_sets(tifdir, segdir, extension_dir1='.tif')
-    # # print(len(x1))
-    # x = get_image_array(tifdir, get_paths(tifdir), 1)
-    # print(len(x))
-
-    # tifpaths = get_paths(tifdir, extension='.tif')
-    # print(find_folder_range(tifpaths, channels=[0,1,2]))
-    # train_loader = MicroscopyDataset(tifpaths, segpaths, batch_size=4)
-    # # print(next(iter(train_loader))[0].shape)
-    # train_loader.__getitem__(2)
-    recursively_count_cells(folder='/mnt/DATA1/anton/data/parasite_annotated_dataset/annotation/highres', extension='')
+    recursively_count_cells(folder='/mnt/DATA1/anton/data/hepatocyte_annotated_dataset/annotation/highres/', extension='')

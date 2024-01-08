@@ -13,7 +13,7 @@ from sklearn.decomposition import PCA
 
 
 def get_umap(df, n_components=2):
-    embedding = umap.UMAP(n_neighbors=5, n_components=n_components, random_state=42).fit(df).embedding_
+    embedding = umap.UMAP(n_neighbors=30, n_components=n_components, random_state=43, min_dist=0.01).fit(df).embedding_
     embedding_df = pd.DataFrame(embedding, columns=['Dimension {}'.format(i) for i in range(embedding.shape[1])])
     return embedding_df
 
@@ -25,8 +25,10 @@ def get_tsne(df, n_components=2):
 
 def get_pca(df, n_components=2):
     pca = PCA(n_components=n_components).fit(df)
-    embedding_df = pca.transform(df)
+    embedding = pca.transform(df)
     print('PCA: {} components explained {} of variance'.format(pca.n_components_, round(sum(pca.explained_variance_ratio_), 2)))
+    embedding_df = pd.DataFrame(embedding, columns=['Dimension {}'.format(i) for i in range(embedding.shape[1])])
+
     return embedding_df
 
 def reduce(name, df, n_components=2, save_path=None):

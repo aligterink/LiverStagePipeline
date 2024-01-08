@@ -8,6 +8,7 @@ import matplotlib.cm as cm
 import pandas as pd
 from utils import data_utils
 import math
+from matplotlib.lines import Line2D
 
 
 plt.rcParams.update({'font.size': 16, 'figure.autolayout': True})
@@ -107,18 +108,171 @@ def plot_annie_needs_in_30_min():
         
         plt.show()
 
-from scipy.interpolate import make_interp_spline
-from collections import Counter
+# def multiplot(features, labels, nrows=4, nbins=300, save_path=None, show=True):
+#     labels = labels.tolist() if not isinstance(labels, list) else labels
+#     num_features = len(features.columns)
+#     unique_labels = list(set(labels))
+#     colors = cm.tab10(range(len(unique_labels)))
+
+#     fig, axs = plt.subplots(nrows=nrows, ncols=math.ceil(num_features/nrows), figsize=(100,50))#figsize=(50,25))
+#     axs = axs.flatten()
+
+#     for i, ax in enumerate(axs):
+
+#         if i >= num_features:
+#             ax.remove()
+
+#         else:
+#             patches = []
+#             ax.set_xlim([features[features.columns[i]].quantile(0.01), features[features.columns[i]].quantile(0.99)])
+
+#             for j, label in enumerate(unique_labels):
+#                 mask = [l == label for l in labels]
+#                 sub_df = features[mask][features.columns[i]]
+#                 bins = min(len(sub_df.unique()), nbins, max(int(len(sub_df)/10), 10))
+#                 patches.append(ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=4)[2])
+#                 ax.set_title(features.columns[i], fontsize=14)
+#                 ax.set_yticks([])
+#                 ax.tick_params(axis="x", labelsize=8)
+#                 xax = ax
 
 
-def multiplot(features, labels, nrows=4, nbins=300):
+#     handles, labels = xax.get_legend_handles_labels()
+#     fig.legend(handles, labels, bbox_to_anchor=(1, 1), loc='upper right')#, bbox_to_anchor=(0.965, 0.18))
+#     plt.tight_layout(rect=[0.01, 0.01, 0.95, 0.99])  # Adjust layout to make space for the legend
+#     plt.subplots_adjust(hspace=0.35)
+
+#     # plt.legend(loc="upper right")
+    
+
+#     if save_path:
+#         plt.savefig(save_path)
+#     if show:
+#         plt.show()
+
+# def multiplot(features, labels, nrows=4, nbins=300, save_path=None, show=True, figsize=(100,50)):
+#     labels = labels.tolist() if not isinstance(labels, list) else labels
+#     num_features = len(features.columns)
+#     unique_labels = list(set(labels))
+#     colors = cm.tab10(range(len(unique_labels)))
+
+#     fig, axs = plt.subplots(nrows=nrows, ncols=math.ceil(num_features/nrows), figsize=figsize)
+#     axs = axs.flatten()
+
+
+#     for i, ax in enumerate(axs):
+
+#         if i >= num_features:
+#             ax.remove()
+
+#         else:
+#             patches = []
+#             ax.set_xlim([features[features.columns[i]].quantile(0.01), features[features.columns[i]].quantile(0.99)])
+
+#             for j, label in enumerate(unique_labels):
+#                 mask = [l == label for l in labels]
+#                 sub_df = features[mask][features.columns[i]]
+#                 bins = min(len(sub_df.unique()), nbins, max(int(len(sub_df)/10), 10))
+#                 patches.append(ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=4)[2])
+#                 ax.set_title(features.columns[i], fontsize=34)
+#                 ax.set_yticks([])
+#                 ax.tick_params(axis="x", labelsize=18)
+
+#     legend_lines = [Line2D([0], [0], color=colors[i], label=unique_labels[i], linewidth=7) for i in range(len(unique_labels))]
+#     fig.legend(handles=legend_lines, labels=unique_labels, bbox_to_anchor=(1, 1), loc='upper right', fontsize=48)
+
+#     plt.tight_layout(rect=[0.01, 0.01, 0.95, 0.99])  # Adjust layout to make space for the legend
+#     plt.subplots_adjust(hspace=0.25)
+
+#     # plt.legend(loc="upper right")
+    
+
+#     if save_path:
+#         plt.savefig(save_path)
+#     if show:
+#         plt.show()
+
+
+# def multiplot(features, labels, nrows=4, nbins=300, save_path=None, show=True, figsize=(50,25), label_settings=None):
+#     labels = labels.tolist() if not isinstance(labels, list) else labels
+
+#     if label_settings:
+#         if isinstance(label_settings[0], list):
+#             label_dict = {l[0]: l[1] for l in label_settings}
+#             labels = [label_dict[l] for l in labels]
+#             unique_labels = [l[1] for l in label_settings if l[1] in labels]
+#         else:
+#             unique_labels = [l for l in label_settings if l in labels]
+#     else:
+#         unique_labels = list(set(labels))
+
+#     num_features = len(features.columns)
+#     colors = cm.tab20(range(len(unique_labels)))
+#     ncols = math.ceil(num_features/nrows)
+
+#     fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+#     axs = axs.flatten()
+
+
+#     for i, ax in enumerate(axs):
+
+#         if i >= num_features:
+#             ax.remove()
+
+#         else:
+#             ax.set_xlim([features[features.columns[i]].quantile(0.01), features[features.columns[i]].quantile(0.99)])
+
+#             for j, label in enumerate(unique_labels):
+#                 mask = [l == label for l in labels]
+#                 sub_df = features[mask][features.columns[i]]
+#                 bins = len(sub_df.unique()) if len(sub_df.unique()) < 1000 else nbins
+#                 ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=2.5)[2]
+#             ax.set_title(features.columns[i], fontsize=10 if len(features.columns[i]) < 35 else 12)
+#             ax.set_yticks([])
+#             ax.tick_params(axis="x", labelsize=8)
+
+#             if (i % ncols) == 0:
+#                 ax.set_ylabel('Probability density', fontsize=8)
+
+#     legend_lines = [Line2D([0], [0], color=colors[i], label=unique_labels[i], linewidth=7) for i in range(len(unique_labels))]
+#     fig.legend(handles=legend_lines, labels=unique_labels, loc='upper right', ncol=round(len(legend_lines)/1), fontsize=10, bbox_to_anchor=(0.95, 1))
+#     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.90])  # Adjust layout to make space for the legend
+
+#     # plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.97])  # Adjust layout to make space for the legend
+#     # plt.subplots_adjust(hspace=0.6, wspace=0.04)
+
+#     # plt.legend(loc="upper right")
+    
+
+#     if save_path:
+#         plt.savefig(save_path)
+#     if show:
+#         plt.show()
+
+
+
+def multiplot(features, labels, nrows=None, nbins=300, save_path=None, show=True, figsize=(30,20), label_settings=None):
     labels = labels.tolist() if not isinstance(labels, list) else labels
-    num_features = len(features.columns)
-    unique_labels = list(set(labels))
-    colors = cm.tab10(range(len(unique_labels)))
 
-    fig, axs = plt.subplots(nrows=nrows, ncols=math.ceil(num_features/nrows), figsize=(50,25))
+
+    if label_settings:
+        if isinstance(label_settings[0], list):
+            label_dict = {l[0]: l[1] for l in label_settings}
+            labels = [label_dict[l] for l in labels]
+            unique_labels = [l[1] for l in label_settings if l[1] in labels]
+        else:
+            unique_labels = [l for l in label_settings if l in labels]
+    else:
+        unique_labels = list(set(labels))
+
+    num_features = len(features.columns)
+    colors = cm.tab20(range(len(unique_labels)))
+    nrows = math.ceil(num_features/6)
+    ncols = math.ceil(num_features/nrows)
+
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
     axs = axs.flatten()
+
 
     for i, ax in enumerate(axs):
 
@@ -126,48 +280,39 @@ def multiplot(features, labels, nrows=4, nbins=300):
             ax.remove()
 
         else:
-            patches = []
             ax.set_xlim([features[features.columns[i]].quantile(0.01), features[features.columns[i]].quantile(0.99)])
 
             for j, label in enumerate(unique_labels):
                 mask = [l == label for l in labels]
                 sub_df = features[mask][features.columns[i]]
-                bins = min(len(sub_df.unique()), nbins, max(int(len(sub_df)/10), 10))
-                patches.append(ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=2.5)[2])
-                ax.set_title(features.columns[i])
-                ax.set_yticks([])
-                xax = ax
+                bins = len(sub_df.unique()) if len(sub_df.unique()) < 1000 else nbins
+                ax.hist(sub_df, bins=bins, label=label, color=colors[j], density=True, histtype='step', linewidth=2.5)[2]
+            ax.set_title(features.columns[i], fontsize=14 if len(features.columns[i]) < 35 else 12)
+            ax.set_yticks([])
+            ax.tick_params(axis="x", labelsize=8)
 
+            if (i % ncols) == 0:
+                ax.set_ylabel('Probability density', fontsize=8)
 
-    handles, labels = xax.get_legend_handles_labels()
-    fig.legend(handles, labels)#, bbox_to_anchor=(0.965, 0.18))
-    # plt.tight_layout()
+    legend_lines = [Line2D([0], [0], color=colors[i], label=unique_labels[i], linewidth=7) for i in range(len(unique_labels))]
+    fig.legend(handles=legend_lines, labels=unique_labels, loc='upper right', ncol=round(len(legend_lines)/1), fontsize=14, bbox_to_anchor=(0.95, 1))
+    plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.97])  # Adjust layout to make space for the legend
+    plt.subplots_adjust(hspace=0.6, wspace=0.04)
 
-    # plt.savefig('/home/anton/Documents/figures/example.png')
-    plt.show()
+    # plt.legend(loc="upper right")
+    
 
-
-
+    if save_path:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
 
 
 if __name__ == '__main__':
-    # df = pd.read_csv('/mnt/DATA1/anton/pipeline_files/feature_analysis/features/lowres_dataset_selection_features.csv')
-    df = pd.read_csv('/mnt/DATA1/anton/pipeline_files/feature_analysis/features/untreated_GS_validation_features.csv')
-
-    # df = df[df.strain != 54].reset_index().drop(['index'], axis=1)
-
-    # group_names = ['day', 'strain']
-    # groups = df[group_names]
-    # features = df.drop(['file', 'label'] + group_names, axis=1)
-
-    x = ['NF{}-D{}'.format(strain, day) for strain, day in zip(df['strain'], df['day'])]
-    groups = pd.DataFrame({'strain-day': x})
-    features = df.drop(['file', 'label', 'strain', 'day'], axis=1)
-
-    # labels = df['day'].astype('int').astype('str')
-    # labels = 'NF' + df['strain'].astype('int').astype('str')
-    labels = 'NF' + df['strain'].astype('int').astype('str') + ' - day ' + df['day'].astype('int').astype('str')
-
+    df = pd.read_csv('/mnt/DATA1/anton/pipeline_files/feature_analysis/features/6c.csv').head(1000)
+    labels = list(df['drug'])
+    features = df.drop(['file', 'label', 'drug'], axis=1)
     features = features.interpolate()
-    multiplot(features, labels)
+
+    multiplot(features, labels, nrows=11, nbins=120)
 

@@ -32,10 +32,10 @@ pipeline_files_folder = '/mnt/DATA1/anton/pipeline_files'
 main_folder = "/mnt/DATA1/anton/pipeline_files"
 session_name = "all_aug_final_final"
 
-imgs_folder = "/mnt/DATA1/anton/data/parasite_annotated_dataset/images"
+imgs_folder = "/mnt/DATA1/anton/data/parasite_annotated_dataset/images/lowres"
 masks_folder = "/mnt/DATA1/anton/data/parasite_annotated_dataset/annotation"
 
-folder_normalize = True
+normalize = None #'min-max'
 train_batch_size, test_batch_size = 3, 8
 loader_workers, eval_workers = train_batch_size, 12
 
@@ -74,20 +74,20 @@ validation_indices, test_indices = list(sss2.split(tmp_indices, [groups[i] for i
 
 
 trainset = MicroscopyDataset([img_paths[i] for i in train_indices], mask_paths=[mask_paths[i] for i in train_indices], channels=[channels[i] for i in train_indices], groups=[groups[i] for i in train_indices], 
-                                        transform=train_transform, individual_transform=train_individual_transform, folder_normalize=folder_normalize, rescale_img=(1040, 1392), rescale_mask=(1040, 1392))
+                                        transform=train_transform, individual_transform=train_individual_transform, normalize=normalize, rescale_img=(1040, 1392), rescale_mask=(1040, 1392))
 valset = MicroscopyDataset([img_paths[i] for i in validation_indices], mask_paths=[mask_paths[i] for i in validation_indices], channels=[channels[i] for i in validation_indices], 
-                                     groups=[groups[i] for i in validation_indices], folder_normalize=folder_normalize, rescale_img=(1040, 1392))
+                                     groups=[groups[i] for i in validation_indices], normalize=normalize, rescale_img=(1040, 1392))
 testset = MicroscopyDataset([img_paths[i] for i in test_indices], mask_paths=[mask_paths[i] for i in test_indices], channels=[channels[i] for i in test_indices], 
-                                     groups=[groups[i] for i in test_indices], folder_normalize=folder_normalize, rescale_img=(1040, 1392))
+                                     groups=[groups[i] for i in test_indices], normalize=normalize, rescale_img=(1040, 1392))
 
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, num_workers=loader_workers,shuffle=True, collate_fn=data_utils.collate_fn)
 validation_loader = torch.utils.data.DataLoader(valset, batch_size=test_batch_size, num_workers=loader_workers, shuffle=True, collate_fn=data_utils.collate_fn)
 test_loader = torch.utils.data.DataLoader(testset, batch_size=test_batch_size, num_workers=loader_workers, shuffle=True, collate_fn=data_utils.collate_fn)
 
-mask_utils.extract_crops_from_set(dataset=trainset, folder=paths['segmentation_crops_folder']) # generate new crops of training set cells
+# mask_utils.extract_crops_from_set(dataset=trainset, folder=paths['segmentation_crops_folder']) # generate new crops of training set cells
 
 
-# cell_viewer.show_dataset(trainset, show=True)#, save_path='/mnt/DATA1/anton/example.png')
+cell_viewer.show_dataset(trainset, show=True)#, save_path='/mnt/DATA1/anton/example.png')
 
 
 
