@@ -10,7 +10,7 @@ Examplary Jupyter notebooks are provided under _tutorials_. Segmentation models 
 ### Installation
 The recommended way to run this pipeline is by creating a Python 3.9 [Anaconda environment](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) and installing the packages specified in requirements.txt.
 
-Here follow a few examplary images from running the pipeline on a dataset containing different drug treatments:
+Here follow a few exemplary images from running the pipeline on a dataset containing different drug treatments:
 
 ![example](imgs/segmentation_example.png)
 ![example](imgs/features_example.png)
